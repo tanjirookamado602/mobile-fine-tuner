@@ -93,6 +93,48 @@ def collate_batch(batch: List[dict]) -> dict:
     return {k: torch.stack([b[k] for b in batch], dim=0) for k in keys}
 
 
+class JsonlMaskedDataset(Dataset):
+    """
+    JSONL dataset {"ids": [...], "mask": [...]} with labels masked in-place.
+    Aligns with C++ JSONL mode used for MMLU (no extra shift done here).
+    """
+
+    def __init__(self, path: str, seq_len: int, pad_id: int):
+        self.samples = []
+        self.seq_len = seq_len
+        self.pad_id = pad_id
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    ids = rec.get("ids", [])
+                    mask = rec.get("mask", [])
+                    if not isinstance(ids, list) or not isinstance(mask, list):
+                        continue
+                    if len(ids) != len(mask) or not ids:
+                        continue
+                    ids = ids[:seq_len]
+                    mask = mask[:seq_len]
+                    if len(ids) < seq_len:
+                        pad_n = seq_len - len(ids)
+                        ids = ids + [pad_id] * pad_n
+                        mask = mask + [0] * pad_n
+                    ids_t = torch.tensor(ids, dtype=torch.long)
+                    attn = torch.ones_like(ids_t, dtype=torch.long)
+                    labels = torch.full_like(ids_t, -100)
+                    mask_t = torch.tensor(mask, dtype=torch.long)
+                    labels = torch.where(mask_t > 0, ids_t, labels)
+                    self.samples.append({"input_ids": ids_t, "attention_mask": attn, "labels": labels})
+                except Exception:
+                    continue
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int):
+        return self.samples[idx]
+
+
 def cycle(loader: Iterable):
     while True:
         for item in loader:
@@ -144,6 +186,8 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch Gemma LoRA finetune (alignment build)")
     parser.add_argument("--model_dir", type=str, required=True)
     parser.add_argument("--data_dir", type=str, required=True)
+    parser.add_argument("--jsonl_train", type=str, default="")
+    parser.add_argument("--jsonl_valid", type=str, default="")
     parser.add_argument("--output_dir", type=str, default="./gemma_lora_pt")
     parser.add_argument(
         "--torch_dtype",
@@ -187,24 +231,33 @@ def main():
     if tok.pad_token_id is None:
         tok.pad_token_id = tok.eos_token_id
 
-    train_dataset = WikiTextDataset(
-        os.path.join(args.data_dir, "wiki.train.raw"),
-        tok,
-        seq_len=args.seq_len,
-        eos_token_id=tok.eos_token_id,
-        data_fraction=args.data_fraction,
-        insert_eos_between_lines=True,
-        drop_last=True,
-    )
-    eval_dataset = WikiTextDataset(
-        os.path.join(args.data_dir, "wiki.valid.raw"),
-        tok,
-        seq_len=args.seq_len,
-        eos_token_id=tok.eos_token_id,
-        data_fraction=1.0,
-        insert_eos_between_lines=True,
-        drop_last=False,
-    )
+    use_jsonl = bool(args.jsonl_train)
+    if use_jsonl:
+        train_dataset: Dataset = JsonlMaskedDataset(args.jsonl_train, args.seq_len, tok.pad_token_id)
+        eval_dataset: Dataset = (
+            JsonlMaskedDataset(args.jsonl_valid, args.seq_len, tok.pad_token_id)
+            if args.jsonl_valid
+            else train_dataset
+        )
+    else:
+        train_dataset = WikiTextDataset(
+            os.path.join(args.data_dir, "wiki.train.raw"),
+            tok,
+            seq_len=args.seq_len,
+            eos_token_id=tok.eos_token_id,
+            data_fraction=args.data_fraction,
+            insert_eos_between_lines=True,
+            drop_last=True,
+        )
+        eval_dataset = WikiTextDataset(
+            os.path.join(args.data_dir, "wiki.valid.raw"),
+            tok,
+            seq_len=args.seq_len,
+            eos_token_id=tok.eos_token_id,
+            data_fraction=1.0,
+            insert_eos_between_lines=True,
+            drop_last=False,
+        )
 
     train_loader = DataLoader(
         train_dataset,

@@ -563,6 +563,14 @@ if(BUILD_TESTS)
         target_link_libraries(test_qwen_multimodal_model operators)
         add_test(NAME QwenMultimodalModel COMMAND test_qwen_multimodal_model)
     endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/graph/test_qwen_multimodal_gradcheck.cpp)
+        add_executable(test_qwen_multimodal_gradcheck
+            finetune_ops/graph/test_qwen_multimodal_gradcheck.cpp
+        )
+        target_link_libraries(test_qwen_multimodal_gradcheck operators)
+        add_test(NAME QwenMultimodalGradCheck COMMAND test_qwen_multimodal_gradcheck)
+    endif()
     
     # Baseline GPT-2 training (full finetune comparison)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/optim/test_baseline_10step.cpp)

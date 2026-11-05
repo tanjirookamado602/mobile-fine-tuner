@@ -136,6 +136,7 @@ set(FINETUNE_SOURCES
     # Stage C: LoRA save/load
     finetune_ops/graph/lora_saver.cpp
     finetune_ops/optim/gemma_trainer.cpp
+    finetune_ops/optim/multimodal_trainer.cpp
 )
 
 # =========================================================================
@@ -570,6 +571,14 @@ if(BUILD_TESTS)
         )
         target_link_libraries(test_qwen_multimodal_gradcheck operators)
         add_test(NAME QwenMultimodalGradCheck COMMAND test_qwen_multimodal_gradcheck)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/optim/test_multimodal_trainer.cpp)
+        add_executable(test_multimodal_trainer
+            finetune_ops/optim/test_multimodal_trainer.cpp
+        )
+        target_link_libraries(test_multimodal_trainer operators)
+        add_test(NAME MultimodalTrainer COMMAND test_multimodal_trainer)
     endif()
     
     # Baseline GPT-2 training (full finetune comparison)

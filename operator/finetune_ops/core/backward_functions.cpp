@@ -636,7 +636,6 @@ std::vector<TensorPtr> CrossEntropyLossBackward::apply(const TensorPtr& grad_out
     
     auto softmax_probs = softmax(input_, -1);
     const float* softmax_data = softmax_probs->data<float>();
-    const float* target_data = target_->data<float>();
     
     auto grad_input = zeros(input_shape, input_->dtype(), input_->device());
     float* grad_data = grad_input->data<float>();
@@ -645,7 +644,12 @@ std::vector<TensorPtr> CrossEntropyLossBackward::apply(const TensorPtr& grad_out
     const int ignore_index = -100;
     int valid_count = 0;
     for (int64_t b = 0; b < batch_size; ++b) {
-        int target_class = static_cast<int>(target_data[b]);
+        int target_class = -1;
+        if (target_->dtype() == DType::kInt32) {
+            target_class = target_->data<int32_t>()[b];
+        } else {
+            target_class = static_cast<int>(target_->data<float>()[b]);
+        }
         if (target_class != ignore_index && target_class >= 0 && target_class < num_classes) {
             valid_count++;
         }
@@ -658,7 +662,12 @@ std::vector<TensorPtr> CrossEntropyLossBackward::apply(const TensorPtr& grad_out
     }
     
     for (int64_t b = 0; b < batch_size; ++b) {
-        int target_class = static_cast<int>(target_data[b]);
+        int target_class = -1;
+        if (target_->dtype() == DType::kInt32) {
+            target_class = target_->data<int32_t>()[b];
+        } else {
+            target_class = static_cast<int>(target_->data<float>()[b]);
+        }
         
         // Skip ignore_index (pad token)
         if (target_class == ignore_index) {

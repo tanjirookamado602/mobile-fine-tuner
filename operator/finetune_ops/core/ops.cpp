@@ -1149,72 +1149,11 @@ TensorPtr permute(const TensorPtr& tensor, const std::vector<int>& dims) {
 }
 
 TensorPtr linear(const TensorPtr& input, const TensorPtr& weight, const TensorPtr& bias) {
-
-    auto result = matmul(input, transpose(weight, 0, 1));
-
+    auto w_t = ops::transpose(weight, 0, 1);
+    auto result = matmul(input, w_t);
     if (bias) {
-
-        const auto& result_shape = result->shape();
-        const auto& bias_shape = bias->shape();
-
-        if (bias_shape.size() == 1 && result_shape.size() >= 1 &&
-            bias_shape[0] == result_shape.back()) {
-
-            auto broadcast_result = zeros(result_shape, result->dtype(), result->device());
-            const float* result_data = result->data<float>();
-            const float* bias_data = bias->data<float>();
-            float* output_data = broadcast_result->data<float>();
-
-            int64_t last_dim = result_shape.back();
-            int64_t total_elements = result->numel();
-
-            for (int64_t i = 0; i < total_elements; ++i) {
-                int64_t bias_idx = i % last_dim;
-                output_data[i] = result_data[i] + bias_data[bias_idx];
-            }
-
-            // Manual broadcast bias addition: Gradient propagation equivalent to add
-            if (result->requires_grad() || bias->requires_grad()) {
-                broadcast_result->set_requires_grad(true);
-                #ifdef USE_NEW_AUTOGRAD_ENGINE
-                auto backward_fn = std::make_shared<AddBackward>(result->shape(), bias->shape());
-                register_backward(broadcast_result, {result, bias}, backward_fn);
-                #endif
-            }
-
-            result = broadcast_result;
-        } else {
-
-            result = add(result, bias);
-        }
+        result = add(result, bias);
     }
-
-    if (input->requires_grad() || weight->requires_grad() || (bias && bias->requires_grad())) {
-        result->set_requires_grad(true);
-
-        auto backward_fn = std::make_shared<LinearBackward>(input, weight, bias);
-        
-        #ifdef USE_NEW_AUTOGRAD_ENGINE
-        register_backward(result, {input, weight, bias}, backward_fn);
-        #else
-        result->set_grad_fn([backward_fn, input, weight, bias](const TensorPtr& grad_output) -> std::vector<TensorPtr> {
-            auto grads = backward_fn->apply(grad_output);
-
-            if (input->requires_grad()) {
-                accumulate_gradient(input, grads[0]);
-            }
-            if (weight->requires_grad()) {
-                accumulate_gradient(weight, grads[1]);
-            }
-            if (bias && bias->requires_grad()) {
-                accumulate_gradient(bias, grads[2]);
-            }
-
-            return grads;
-        });
-        #endif
-    }
-
     return result;
 }
 
@@ -1926,7 +1865,7 @@ TensorPtr reshape(const TensorPtr& tensor, const std::vector<int64_t>& shape) {
 }
 
 TensorPtr view(const TensorPtr& tensor, const std::vector<int64_t>& shape) {
-    return tensor->view(shape);
+    return reshape(tensor, shape);
 }
 
 TensorPtr flatten(const TensorPtr& tensor, int start_dim, int end_dim) {

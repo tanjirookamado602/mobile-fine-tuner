@@ -546,6 +546,14 @@ if(BUILD_TESTS)
         target_link_libraries(test_concat operators)
         add_test(NAME ConcatOpTest COMMAND test_concat)
     endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/graph/test_qwen_multimodal_autograd.cpp)
+        add_executable(test_qwen_multimodal_autograd
+            finetune_ops/graph/test_qwen_multimodal_autograd.cpp
+        )
+        target_link_libraries(test_qwen_multimodal_autograd operators)
+        add_test(NAME QwenMultimodalAutograd COMMAND test_qwen_multimodal_autograd)
+    endif()
     
     # Baseline GPT-2 training (full finetune comparison)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/optim/test_baseline_10step.cpp)

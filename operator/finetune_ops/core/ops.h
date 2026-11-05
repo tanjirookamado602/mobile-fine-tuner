@@ -128,6 +128,9 @@ inline TensorPtr to_fp32(const TensorPtr& tensor) { return cast(tensor, DType::k
 TensorPtr flatten(const TensorPtr& tensor, int start_dim = 0, int end_dim = -1);
 TensorPtr squeeze(const TensorPtr& tensor, int dim = -1);
 TensorPtr unsqueeze(const TensorPtr& tensor, int dim);
+/** @brief Concatenate a sequence of tensors along a given dimension */
+TensorPtr concat(const std::vector<TensorPtr>& tensors, int dim = 0);
+inline TensorPtr cat(const std::vector<TensorPtr>& tensors, int dim = 0) { return concat(tensors, dim); }
 
 // Advanced indexing helpers are intentionally not part of the stable API yet.
 // TensorPtr index_select(const TensorPtr& tensor, int dim, const TensorPtr& index);

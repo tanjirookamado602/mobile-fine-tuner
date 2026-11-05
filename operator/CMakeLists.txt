@@ -538,6 +538,14 @@ if(BUILD_TESTS)
         )
         target_link_libraries(test_gemma_forward operators)
     endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/core/test_concat.cpp)
+        add_executable(test_concat
+            finetune_ops/core/test_concat.cpp
+        )
+        target_link_libraries(test_concat operators)
+        add_test(NAME ConcatOpTest COMMAND test_concat)
+    endif()
     
     # Baseline GPT-2 training (full finetune comparison)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/optim/test_baseline_10step.cpp)

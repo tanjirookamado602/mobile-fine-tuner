@@ -609,6 +609,24 @@ std::vector<TensorPtr> SliceBackward::apply(const TensorPtr& grad_output) {
     return {grad_input};
 }
 
+std::vector<TensorPtr> ConcatBackward::apply(const TensorPtr& grad_output) {
+    std::vector<TensorPtr> input_grads;
+    input_grads.reserve(inputs_.size());
+
+    int64_t current_offset = 0;
+    for (const auto& in_t : inputs_) {
+        if (!in_t) {
+            input_grads.push_back(nullptr);
+            continue;
+        }
+        int64_t slice_len = in_t->shape()[dim_];
+        auto grad_slice = grad_output->slice(dim_, current_offset, current_offset + slice_len, 1);
+        input_grads.push_back(grad_slice);
+        current_offset += slice_len;
+    }
+    return input_grads;
+}
+
 std::vector<TensorPtr> CrossEntropyLossBackward::apply(const TensorPtr& grad_output) {
     
     const auto& input_shape = input_->shape();

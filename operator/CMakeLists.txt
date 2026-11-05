@@ -122,6 +122,7 @@ set(FINETUNE_SOURCES
     finetune_ops/graph/auto_model.cpp
     # Qwen model and MMLU dataset
     finetune_ops/graph/qwen_model.cpp
+    finetune_ops/graph/qwen_multimodal.cpp
     finetune_ops/data/mmlu_dataset.cpp
     
     # Stage B: data loading and training
@@ -553,6 +554,14 @@ if(BUILD_TESTS)
         )
         target_link_libraries(test_qwen_multimodal_autograd operators)
         add_test(NAME QwenMultimodalAutograd COMMAND test_qwen_multimodal_autograd)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/graph/test_qwen_multimodal_model.cpp)
+        add_executable(test_qwen_multimodal_model
+            finetune_ops/graph/test_qwen_multimodal_model.cpp
+        )
+        target_link_libraries(test_qwen_multimodal_model operators)
+        add_test(NAME QwenMultimodalModel COMMAND test_qwen_multimodal_model)
     endif()
     
     # Baseline GPT-2 training (full finetune comparison)

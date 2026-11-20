@@ -1,0 +1,6 @@
+build/
+build-android/
+outputs/
+data/features/
+__pycache__/
+*.pyc

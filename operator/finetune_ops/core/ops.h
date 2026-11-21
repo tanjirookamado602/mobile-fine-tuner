@@ -188,4 +188,6 @@ std::vector<int64_t> broadcast_shape(const TensorPtr& a, const TensorPtr& b);
 
 std::vector<int64_t> infer_broadcast_shape(const TensorPtr& a, const TensorPtr& b);
 
+TensorPtr concat(const std::vector<TensorPtr>& tensors, int dim);
+
 }

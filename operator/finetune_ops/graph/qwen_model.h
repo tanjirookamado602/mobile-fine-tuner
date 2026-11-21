@@ -62,6 +62,7 @@ public:
     ~QwenModel() = default;
 
     TensorPtr forward_hidden(const TensorPtr& input_ids, const TensorPtr& attention_mask = nullptr);
+    TensorPtr forward_hidden_from_embeds(const TensorPtr& x_in, const TensorPtr& attention_mask = nullptr);
     TensorPtr lm_head(const TensorPtr& hidden);
     TensorPtr forward(const TensorPtr& input_ids, const TensorPtr& attention_mask = nullptr);
     const TensorPtr& embedding_weight() const { return embed_tokens_; }

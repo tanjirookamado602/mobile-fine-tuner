@@ -237,6 +237,16 @@ public:
     std::vector<TensorPtr> apply(const TensorPtr& grad_output) override;
 };
 
+class ConcatBackward : public BackwardFunction {
+private:
+    std::vector<TensorPtr> inputs_;
+    int dim_;
+public:
+    ConcatBackward(const std::vector<TensorPtr>& inputs, int dim)
+        : inputs_(inputs), dim_(dim) {}
+    std::vector<TensorPtr> apply(const TensorPtr& grad_output) override;
+};
+
 class LinearBackward : public BackwardFunction {
 private:
     TensorPtr input_, weight_, bias_;

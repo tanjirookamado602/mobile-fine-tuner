@@ -1870,7 +1870,7 @@ TensorPtr reshape(const TensorPtr& tensor, const std::vector<int64_t>& shape) {
 }
 
 TensorPtr view(const TensorPtr& tensor, const std::vector<int64_t>& shape) {
-    return tensor->view(shape);
+    return reshape(tensor, shape);
 }
 
 TensorPtr flatten(const TensorPtr& tensor, int start_dim, int end_dim) {
@@ -2893,6 +2893,74 @@ TensorPtr cast(const TensorPtr& tensor, DType target_dtype) {
     }
 
     throw TensorError("cast: unsupported dtype conversion");
+}
+
+TensorPtr concat(const std::vector<TensorPtr>& tensors, int dim) {
+    if (tensors.empty()) {
+        throw TensorError("concat: empty tensor list");
+    }
+    const auto& first_shape = tensors[0]->shape();
+    int ndim = static_cast<int>(first_shape.size());
+    if (ndim == 0) {
+        throw TensorError("concat: 0-dim scalar tensors cannot be concatenated");
+    }
+    int normalized_dim = (dim < 0) ? (dim + ndim) : dim;
+    if (normalized_dim < 0 || normalized_dim >= ndim) {
+        throw TensorError("concat: dimension out of range");
+    }
+
+    DType dtype = tensors[0]->dtype();
+    Device device = tensors[0]->device();
+    bool any_requires_grad = false;
+
+    int64_t total_concat_dim = 0;
+    for (size_t i = 0; i < tensors.size(); ++i) {
+        const auto& t = tensors[i];
+        if (!t) throw TensorError("concat: null tensor in inputs");
+        if (t->ndim() != ndim) throw TensorError("concat: all tensors must have same ndim");
+        if (t->dtype() != dtype) throw TensorError("concat: all tensors must have same dtype");
+        if (t->device() != device) throw TensorError("concat: all tensors must have same device");
+        for (int d = 0; d < ndim; ++d) {
+            if (d != normalized_dim && t->shape()[d] != first_shape[d]) {
+                throw TensorError("concat: tensor dimensions must match on non-concatenation axes");
+            }
+        }
+        total_concat_dim += t->shape()[normalized_dim];
+        if (t->requires_grad()) any_requires_grad = true;
+    }
+
+    auto out_shape = first_shape;
+    out_shape[normalized_dim] = total_concat_dim;
+    auto result = zeros(out_shape, dtype, device);
+
+    int64_t outer_size = 1;
+    for (int d = 0; d < normalized_dim; ++d) outer_size *= out_shape[d];
+    int64_t inner_size = 1;
+    for (int d = normalized_dim + 1; d < ndim; ++d) inner_size *= out_shape[d];
+
+    size_t elem_size = DTypeUtils::size_of(dtype);
+    uint8_t* dst_base = static_cast<uint8_t*>(result->data_ptr());
+
+    for (int64_t outer = 0; outer < outer_size; ++outer) {
+        int64_t dim_offset = 0;
+        for (const auto& t : tensors) {
+            int64_t t_dim = t->shape()[normalized_dim];
+            const uint8_t* src_ptr = static_cast<const uint8_t*>(t->data_ptr()) + (outer * t_dim * inner_size) * elem_size;
+            uint8_t* dst_ptr = dst_base + (outer * total_concat_dim * inner_size + dim_offset * inner_size) * elem_size;
+            std::memcpy(dst_ptr, src_ptr, t_dim * inner_size * elem_size);
+            dim_offset += t_dim;
+        }
+    }
+
+    if (any_requires_grad) {
+        result->set_requires_grad(true);
+        #ifdef USE_NEW_AUTOGRAD_ENGINE
+        auto backward_fn = std::make_shared<ConcatBackward>(tensors, normalized_dim);
+        register_backward(result, tensors, backward_fn);
+        #endif
+    }
+
+    return result;
 }
 
 }

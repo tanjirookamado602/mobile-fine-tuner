@@ -345,10 +345,8 @@ TensorPtr QwenModel::mlp(const TensorPtr& x, QwenBlock& blk) {
 }
 
 // -------------- 前向 --------------
-TensorPtr QwenModel::forward_hidden(const TensorPtr& input_ids, const TensorPtr& attention_mask) {
-    if (offload_) offload_->load(0);
-    auto x = embedding_lookup(embed_tokens_, input_ids); // [B,S,H]
-    if (offload_) offload_->offload_all();
+TensorPtr QwenModel::forward_hidden_from_embeds(const TensorPtr& x_in, const TensorPtr& attention_mask) {
+    auto x = x_in; // [B,S,H]
 
     TensorPtr pad_mask = nullptr;
     if (attention_mask) {
@@ -415,6 +413,13 @@ TensorPtr QwenModel::forward_hidden(const TensorPtr& input_ids, const TensorPtr&
     x = rms_norm_affine(x, final_norm_weight_, config_.rms_norm_eps);
     if (offload_) offload_->offload_all();
     return x;
+}
+
+TensorPtr QwenModel::forward_hidden(const TensorPtr& input_ids, const TensorPtr& attention_mask) {
+    if (offload_) offload_->load(0);
+    auto x = embedding_lookup(embed_tokens_, input_ids); // [B,S,H]
+    if (offload_) offload_->offload_all();
+    return forward_hidden_from_embeds(x, attention_mask);
 }
 
 TensorPtr QwenModel::lm_head(const TensorPtr& hidden) {

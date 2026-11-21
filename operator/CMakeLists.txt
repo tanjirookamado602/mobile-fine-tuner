@@ -532,6 +532,14 @@ if(BUILD_TESTS)
         add_test(NAME TensorSlice COMMAND test_tensor_slice)
     endif()
 
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/core/test_concat.cpp)
+        add_executable(test_concat
+            finetune_ops/core/test_concat.cpp
+        )
+        target_link_libraries(test_concat operators)
+        add_test(NAME Concat COMMAND test_concat)
+    endif()
+
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/finetune_ops/core/test_selected_token_lm_loss.cpp)
         add_executable(test_selected_token_lm_loss
             finetune_ops/core/test_selected_token_lm_loss.cpp

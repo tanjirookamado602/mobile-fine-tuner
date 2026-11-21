@@ -1,0 +1,587 @@
+[
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Prefix [1, 8, 896] (ConcatBackward)",
+    "metrics": {
+      "cos_sim": 0.9999997747978316,
+      "grad_norm_hf": 9.800572962982582,
+      "max_abs": 0.0009282827377319336,
+      "mean_abs": 5.376955123637117e-05,
+      "rel_max_to_norm": 9.471719064161093e-05,
+      "rel_mean_to_norm": 5.486368137807541e-06
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Final RMSNorm [896]",
+    "metrics": {
+      "cos_sim": 0.9999991505617231,
+      "grad_norm_hf": 0.08152430881301712,
+      "max_abs": 7.990002632141113e-05,
+      "mean_abs": 9.151700050478797e-07,
+      "rel_max_to_norm": 0.0009800760961210786,
+      "rel_mean_to_norm": 1.1225731543896601e-05
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999998318358884,
+      "grad_norm_hf": 1.3483811782197668,
+      "max_abs": 0.00016145408153533936,
+      "mean_abs": 1.1418537176591648e-07,
+      "rel_max_to_norm": 0.00011973919848716911,
+      "rel_mean_to_norm": 8.468330291927377e-08
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999996806354384,
+      "grad_norm_hf": 15.867370515019243,
+      "max_abs": 0.0003657788038253784,
+      "mean_abs": 4.005676828142973e-06,
+      "rel_max_to_norm": 2.305226335259064e-05,
+      "rel_mean_to_norm": 2.5244742500662924e-07
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999995745891281,
+      "grad_norm_hf": 2.6927030931582063,
+      "max_abs": 0.00017234310507774353,
+      "mean_abs": 1.3107755166166287e-06,
+      "rel_max_to_norm": 6.40037535202377e-05,
+      "rel_mean_to_norm": 4.86787986372001e-07
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999995010603194,
+      "grad_norm_hf": 4.82872485539448,
+      "max_abs": 0.0001475214958190918,
+      "mean_abs": 1.3429895819972128e-06,
+      "rel_max_to_norm": 3.055081832924389e-05,
+      "rel_mean_to_norm": 2.781250997344764e-07
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999997029441902,
+      "grad_norm_hf": 1.4238715446979318,
+      "max_abs": 6.153061985969543e-05,
+      "mean_abs": 4.4260030447424395e-07,
+      "rel_max_to_norm": 4.321360314332686e-05,
+      "rel_mean_to_norm": 3.108428608760693e-07
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999083998254,
+      "grad_norm_hf": 17.808554326875754,
+      "max_abs": 0.0006126612424850464,
+      "mean_abs": 9.41044388115364e-07,
+      "rel_max_to_norm": 3.440263770093989e-05,
+      "rel_mean_to_norm": 5.284226730830899e-08
+    }
+  },
+  {
+    "prompt_idx": 0,
+    "mode": "Masked Loss",
+    "tensor": "LM Head / Embeddings [151936, 896]",
+    "metrics": {
+      "cos_sim": 0.9754298643839651,
+      "grad_norm_hf": 48.32528185287276,
+      "max_abs": 1.2194225788116455,
+      "mean_abs": 5.906223206001947e-06,
+      "rel_max_to_norm": 0.025233636143585782,
+      "rel_mean_to_norm": 1.2221808087914382e-07
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Prefix [1, 8, 896] (ConcatBackward)",
+    "metrics": {
+      "cos_sim": 0.9999999005821077,
+      "grad_norm_hf": 14.124719014448855,
+      "max_abs": 0.0010889768600463867,
+      "mean_abs": 5.367505930463169e-05,
+      "rel_max_to_norm": 7.709724058456262e-05,
+      "rel_mean_to_norm": 3.8000797927180775e-06
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Final RMSNorm [896]",
+    "metrics": {
+      "cos_sim": 0.9999997634677141,
+      "grad_norm_hf": 0.1394142074085717,
+      "max_abs": 7.618218660354614e-05,
+      "mean_abs": 6.572155076664135e-07,
+      "rel_max_to_norm": 0.0005464449285268163,
+      "rel_mean_to_norm": 4.714121464935369e-06
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999396083163,
+      "grad_norm_hf": 1.5407147607874017,
+      "max_abs": 6.972253322601318e-05,
+      "mean_abs": 7.959676374125988e-08,
+      "rel_max_to_norm": 4.5253368761350315e-05,
+      "rel_mean_to_norm": 5.1662232210022624e-08
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999257340422,
+      "grad_norm_hf": 26.246595787616382,
+      "max_abs": 0.00018762052059173584,
+      "mean_abs": 3.385881185513764e-06,
+      "rel_max_to_norm": 7.1483754354250945e-06,
+      "rel_mean_to_norm": 1.290026795441089e-07
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999172343215,
+      "grad_norm_hf": 3.157721266846893,
+      "max_abs": 0.0001001688651740551,
+      "mean_abs": 6.200017922095492e-07,
+      "rel_max_to_norm": 3.172188319016703e-05,
+      "rel_mean_to_norm": 1.963446865050406e-07
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999253045433,
+      "grad_norm_hf": 5.540254421105202,
+      "max_abs": 9.044259786605835e-05,
+      "mean_abs": 5.649168794888855e-07,
+      "rel_max_to_norm": 1.632462897759847e-05,
+      "rel_mean_to_norm": 1.019658731441598e-07
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999847585189,
+      "grad_norm_hf": 2.7668933875859016,
+      "max_abs": 4.8123300075531006e-05,
+      "mean_abs": 1.6788082958809337e-07,
+      "rel_max_to_norm": 1.739253861078504e-05,
+      "rel_mean_to_norm": 6.067484578236956e-08
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999739086324,
+      "grad_norm_hf": 29.049102971648534,
+      "max_abs": 0.000817418098449707,
+      "mean_abs": 6.358219720910226e-07,
+      "rel_max_to_norm": 2.8139185545504318e-05,
+      "rel_mean_to_norm": 2.1887834977608533e-08
+    }
+  },
+  {
+    "prompt_idx": 1,
+    "mode": "Masked Loss",
+    "tensor": "LM Head / Embeddings [151936, 896]",
+    "metrics": {
+      "cos_sim": 0.9493889626552905,
+      "grad_norm_hf": 72.80678354464075,
+      "max_abs": 3.268219232559204,
+      "mean_abs": 1.1642444787981977e-05,
+      "rel_max_to_norm": 0.044888938550008646,
+      "rel_mean_to_norm": 1.599087917521225e-07
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Prefix [1, 8, 896] (ConcatBackward)",
+    "metrics": {
+      "cos_sim": 0.9999999990128855,
+      "grad_norm_hf": 498.26951568529677,
+      "max_abs": 0.01708221435546875,
+      "mean_abs": 0.0005052550742123328,
+      "rel_max_to_norm": 3.428308138011339e-05,
+      "rel_mean_to_norm": 1.0140196385834029e-06
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Final RMSNorm [896]",
+    "metrics": {
+      "cos_sim": 0.999999775143321,
+      "grad_norm_hf": 0.11657035931130645,
+      "max_abs": 5.456991493701935e-05,
+      "mean_abs": 7.703682994377102e-07,
+      "rel_max_to_norm": 0.00046812856423320936,
+      "rel_mean_to_norm": 6.60861220624531e-06
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999843063807,
+      "grad_norm_hf": 13.610053003177772,
+      "max_abs": 0.00040712952613830566,
+      "mean_abs": 4.3653766706090026e-07,
+      "rel_max_to_norm": 2.9913882484015035e-05,
+      "rel_mean_to_norm": 3.207464856741868e-08
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999989906406,
+      "grad_norm_hf": 856.9810240151285,
+      "max_abs": 0.006809234619140625,
+      "mean_abs": 4.219096784598482e-05,
+      "rel_max_to_norm": 7.945607228545135e-06,
+      "rel_mean_to_norm": 4.923209110081761e-08
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.999999978289698,
+      "grad_norm_hf": 13.203603735563867,
+      "max_abs": 0.0003434419631958008,
+      "mean_abs": 1.9579645079940468e-06,
+      "rel_max_to_norm": 2.60112292124244e-05,
+      "rel_mean_to_norm": 1.4829015980842617e-07
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999638653042,
+      "grad_norm_hf": 24.646119001323232,
+      "max_abs": 0.0002701878547668457,
+      "mean_abs": 2.041132862373251e-06,
+      "rel_max_to_norm": 1.0962693751187705e-05,
+      "rel_mean_to_norm": 8.281761774596565e-08
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999907411175,
+      "grad_norm_hf": 6.121587217071375,
+      "max_abs": 7.343292236328125e-05,
+      "mean_abs": 4.0365157095202043e-07,
+      "rel_max_to_norm": 1.1995732439862265e-05,
+      "rel_mean_to_norm": 6.593903780808422e-08
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999478510767,
+      "grad_norm_hf": 22.258832882102826,
+      "max_abs": 0.0005733519792556763,
+      "mean_abs": 8.093332915547228e-07,
+      "rel_max_to_norm": 2.5758402621219784e-05,
+      "rel_mean_to_norm": 3.636009560076393e-08
+    }
+  },
+  {
+    "prompt_idx": 2,
+    "mode": "Masked Loss",
+    "tensor": "LM Head / Embeddings [151936, 896]",
+    "metrics": {
+      "cos_sim": 0.8292234773460317,
+      "grad_norm_hf": 86.31708333607314,
+      "max_abs": 12.821876525878906,
+      "mean_abs": 2.145206987298328e-05,
+      "rel_max_to_norm": 0.14854390382906177,
+      "rel_mean_to_norm": 2.4852635241925406e-07
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Prefix [1, 8, 896] (ConcatBackward)",
+    "metrics": {
+      "cos_sim": 0.9999999802837456,
+      "grad_norm_hf": 215.97805482885911,
+      "max_abs": 0.00675201416015625,
+      "mean_abs": 0.00035256322409996495,
+      "rel_max_to_norm": 3.1262501023571636e-05,
+      "rel_mean_to_norm": 1.6324029975144198e-06
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Final RMSNorm [896]",
+    "metrics": {
+      "cos_sim": 0.9999997962820685,
+      "grad_norm_hf": 0.19805176468212315,
+      "max_abs": 9.379535913467407e-05,
+      "mean_abs": 9.460022718193224e-07,
+      "rel_max_to_norm": 0.0004735901206674114,
+      "rel_mean_to_norm": 4.776540483407948e-06
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.999999232542474,
+      "grad_norm_hf": 2.985630858908567,
+      "max_abs": 0.0006163716316223145,
+      "mean_abs": 4.3048012695706973e-07,
+      "rel_max_to_norm": 0.00020644602790829608,
+      "rel_mean_to_norm": 1.4418397561522147e-07
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999812903891,
+      "grad_norm_hf": 360.77692898354536,
+      "max_abs": 0.0013463497161865234,
+      "mean_abs": 2.543436795370906e-05,
+      "rel_max_to_norm": 3.7318065763787382e-06,
+      "rel_mean_to_norm": 7.049887592692775e-08
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999051739261,
+      "grad_norm_hf": 7.508571352790404,
+      "max_abs": 0.00022697728127241135,
+      "mean_abs": 1.7296627432873009e-06,
+      "rel_max_to_norm": 3.022909027667823e-05,
+      "rel_mean_to_norm": 2.3035843465005863e-07
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999225857564,
+      "grad_norm_hf": 26.490961656061117,
+      "max_abs": 0.0004177987575531006,
+      "mean_abs": 2.8410907326078593e-06,
+      "rel_max_to_norm": 1.5771369985637825e-05,
+      "rel_mean_to_norm": 1.0724754991888761e-07
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999739738045,
+      "grad_norm_hf": 3.418044641252791,
+      "max_abs": 4.16487455368042e-05,
+      "mean_abs": 2.823277368985157e-07,
+      "rel_max_to_norm": 1.2184962429726139e-05,
+      "rel_mean_to_norm": 8.25991953092086e-08
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999589736668,
+      "grad_norm_hf": 29.953463694335785,
+      "max_abs": 0.0007559657096862793,
+      "mean_abs": 8.803135026339731e-07,
+      "rel_max_to_norm": 2.523800644228025e-05,
+      "rel_mean_to_norm": 2.9389372515219717e-08
+    }
+  },
+  {
+    "prompt_idx": 3,
+    "mode": "Masked Loss",
+    "tensor": "LM Head / Embeddings [151936, 896]",
+    "metrics": {
+      "cos_sim": 0.9097069705898719,
+      "grad_norm_hf": 77.68972338633735,
+      "max_abs": 4.8237170577049255,
+      "mean_abs": 1.7196809034282712e-05,
+      "rel_max_to_norm": 0.06208951258221587,
+      "rel_mean_to_norm": 2.2135242969994605e-07
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Prefix [1, 8, 896] (ConcatBackward)",
+    "metrics": {
+      "cos_sim": 0.9999999084664472,
+      "grad_norm_hf": 14.728885065749594,
+      "max_abs": 0.0014126300811767578,
+      "mean_abs": 4.983186512167289e-05,
+      "rel_max_to_norm": 9.590882642309282e-05,
+      "rel_mean_to_norm": 3.3832747624291022e-06
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Final RMSNorm [896]",
+    "metrics": {
+      "cos_sim": 0.9999998251062022,
+      "grad_norm_hf": 0.16945777456759958,
+      "max_abs": 6.884336471557617e-05,
+      "mean_abs": 9.585156226827557e-07,
+      "rel_max_to_norm": 0.00040625674974686466,
+      "rel_mean_to_norm": 5.656368526749011e-06
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999998857564811,
+      "grad_norm_hf": 1.408483134469454,
+      "max_abs": 0.0001055002212524414,
+      "mean_abs": 1.1806433598818665e-07,
+      "rel_max_to_norm": 7.490343240219643e-05,
+      "rel_mean_to_norm": 8.382374847006966e-08
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 0 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999999067123132,
+      "grad_norm_hf": 27.88833601264697,
+      "max_abs": 0.0003617703914642334,
+      "mean_abs": 3.674064716417852e-06,
+      "rel_max_to_norm": 1.297210386808889e-05,
+      "rel_mean_to_norm": 1.3174198398755606e-07
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.999999850414869,
+      "grad_norm_hf": 2.21290204778094,
+      "max_abs": 0.00019468367099761963,
+      "mean_abs": 4.918327692151581e-07,
+      "rel_max_to_norm": 8.797663285311571e-05,
+      "rel_mean_to_norm": 2.222569090702127e-07
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 12 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.999999869967871,
+      "grad_norm_hf": 4.260488785716354,
+      "max_abs": 9.588152170181274e-05,
+      "mean_abs": 6.262006347337399e-07,
+      "rel_max_to_norm": 2.250481729308644e-05,
+      "rel_mean_to_norm": 1.4697859006998986e-07
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Q-Proj [896, 896]",
+    "metrics": {
+      "cos_sim": 0.9999998221292321,
+      "grad_norm_hf": 1.730382820310571,
+      "max_abs": 9.668804705142975e-05,
+      "mean_abs": 3.5095005209221095e-07,
+      "rel_max_to_norm": 5.587667995572228e-05,
+      "rel_mean_to_norm": 2.0281642187652976e-07
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "Layer 23 Down-Proj [4864, 896]",
+    "metrics": {
+      "cos_sim": 0.9999998764622081,
+      "grad_norm_hf": 22.3937795497813,
+      "max_abs": 0.0006963610649108887,
+      "mean_abs": 1.2010926643465314e-06,
+      "rel_max_to_norm": 3.1096182909314134e-05,
+      "rel_mean_to_norm": 5.363510262644377e-08
+    }
+  },
+  {
+    "prompt_idx": 4,
+    "mode": "Masked Loss",
+    "tensor": "LM Head / Embeddings [151936, 896]",
+    "metrics": {
+      "cos_sim": 0.9154670308762516,
+      "grad_norm_hf": 52.149042092518435,
+      "max_abs": 6.464873790740967,
+      "mean_abs": 7.612075755462246e-06,
+      "rel_max_to_norm": 0.12396917625584394,
+      "rel_mean_to_norm": 1.4596770046048777e-07
+    }
+  }
+]

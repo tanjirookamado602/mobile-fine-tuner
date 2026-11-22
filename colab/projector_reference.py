@@ -327,7 +327,7 @@ class LearnedPrefix(nn.Module):
 # ==============================================================================
 def compute_sentence_bleu(reference_tokens_list, candidate_tokens, max_n=4):
     cand_len = len(candidate_tokens)
-    if cand_len == 0:
+    if cand_len == 0 or any(len(r) == 0 for r in reference_tokens_list):
         return 0.0
     ref_lens = [len(r) for r in reference_tokens_list]
     closest_ref_len = min(ref_lens, key=lambda r: (abs(r - cand_len), r))
@@ -335,10 +335,9 @@ def compute_sentence_bleu(reference_tokens_list, candidate_tokens, max_n=4):
 
     precisions = []
     for n in range(1, max_n + 1):
+        if cand_len < n:
+            return 0.0
         cand_ngrams = Counter([tuple(candidate_tokens[i:i+n]) for i in range(cand_len - n + 1)])
-        if sum(cand_ngrams.values()) == 0:
-            precisions.append(0.0)
-            continue
         max_ref_ngrams = Counter()
         for ref in reference_tokens_list:
             ref_ngrams = Counter([tuple(ref[i:i+n]) for i in range(len(ref) - n + 1)])
@@ -346,7 +345,9 @@ def compute_sentence_bleu(reference_tokens_list, candidate_tokens, max_n=4):
                 max_ref_ngrams[ng] = max(max_ref_ngrams[ng], ref_ngrams[ng])
         clipped_count = sum(min(count, max_ref_ngrams[ng]) for ng, count in cand_ngrams.items())
         total_count = sum(cand_ngrams.values())
-        precisions.append((clipped_count + 1e-7) / (total_count + 1e-7))
+        if clipped_count == 0:
+            return 0.0
+        precisions.append(clipped_count / total_count)
 
     p_log_sum = sum(math.log(p) for p in precisions) / max_n
     return bp * math.exp(p_log_sum)
@@ -393,7 +394,7 @@ def conduct_norm_audit(features_dict, qwen_model):
 # ==============================================================================
 def train_and_evaluate(
     mode, seed, lr, records, features_dict, qwen_model, tokenizer, device,
-    num_steps=1000, val_every=250, use_amp=True
+    num_steps=1000, val_every=250, use_amp=True, eval_test=True
 ):
     torch.manual_seed(seed)
     random.seed(seed)
@@ -539,50 +540,54 @@ def train_and_evaluate(
 
     elapsed = time.time() - t_start
 
-    # Comprehensive Final Evaluation on ALL 5 Captions across all 200 Test Images
-    final_test_loss = evaluate_split_all_captions(test_recs, mode, max_images=None)
-
-    # Qualitative Greedy Generations on 10 Sample Images
+    final_test_loss = val_losses[-1][1]
+    mean_bleu4 = 0.0
     generated_samples = []
-    if projector is not None: projector.eval()
-    if learned_prefix is not None: learned_prefix.eval()
 
-    sample_test_recs = test_recs[:10]
-    with torch.no_grad():
-        for r in sample_test_recs:
-            v_pref = get_prefix_for_eval(r, mode)
-            p_text = "<|im_start|>user\nDescribe the image in detail.<|im_end|>\n<|im_start|>assistant\n"
-            p_ids = tokenizer.encode(p_text, add_special_tokens=False)
-            tot_ids = torch.tensor([p_ids], device=device, dtype=torch.long)
-            text_embeds = qwen_model.model.embed_tokens(tot_ids)
+    if eval_test:
+        # Comprehensive Final Evaluation on ALL 5 Captions across all 200 Test Images
+        final_test_loss = evaluate_split_all_captions(test_recs, mode, max_images=None)
 
-            curr_embeds = torch.cat([v_pref, text_embeds], dim=1) if v_pref is not None else text_embeds
-            gen_toks = []
-            for _ in range(24):
-                out = qwen_model(inputs_embeds=curr_embeds)
-                next_tok = torch.argmax(out.logits[:, -1, :], dim=-1)
-                tok_id = next_tok.item()
-                if tok_id in [tokenizer.eos_token_id, 151645]: # <|im_end|>
-                    break
-                gen_toks.append(tok_id)
-                next_embed = qwen_model.model.embed_tokens(next_tok.unsqueeze(0))
-                curr_embeds = torch.cat([curr_embeds, next_embed], dim=1)
+        # Qualitative Greedy Generations on 10 Sample Images
+        if projector is not None: projector.eval()
+        if learned_prefix is not None: learned_prefix.eval()
 
-            gen_text = tokenizer.decode(gen_toks, skip_special_tokens=True).strip()
-            ref_texts = [c["caption"] for c in r["captions"]]
+        sample_test_recs = test_recs[:10]
+        with torch.no_grad():
+            for r in sample_test_recs:
+                v_pref = get_prefix_for_eval(r, mode)
+                p_text = "<|im_start|>user\nDescribe the image in detail.<|im_end|>\n<|im_start|>assistant\n"
+                p_ids = tokenizer.encode(p_text, add_special_tokens=False)
+                tot_ids = torch.tensor([p_ids], device=device, dtype=torch.long)
+                text_embeds = qwen_model.model.embed_tokens(tot_ids)
 
-            ref_toks_list = [c.lower().split() for c in ref_texts]
-            cand_toks = gen_text.lower().split()
-            bleu4 = compute_sentence_bleu(ref_toks_list, cand_toks, max_n=4)
+                curr_embeds = torch.cat([v_pref, text_embeds], dim=1) if v_pref is not None else text_embeds
+                gen_toks = []
+                for _ in range(24):
+                    out = qwen_model(inputs_embeds=curr_embeds)
+                    next_tok = torch.argmax(out.logits[:, -1, :], dim=-1)
+                    tok_id = next_tok.item()
+                    if tok_id in [tokenizer.eos_token_id, 151645]: # <|im_end|>
+                        break
+                    gen_toks.append(tok_id)
+                    next_embed = qwen_model.model.embed_tokens(next_tok.unsqueeze(0))
+                    curr_embeds = torch.cat([curr_embeds, next_embed], dim=1)
 
-            generated_samples.append({
-                "image_id": r["image_id"],
-                "generated": gen_text,
-                "references": ref_texts,
-                "bleu4": bleu4
-            })
+                gen_text = tokenizer.decode(gen_toks, skip_special_tokens=True).strip()
+                ref_texts = [c["caption"] for c in r["captions"]]
 
-    mean_bleu4 = float(np.mean([s["bleu4"] for s in generated_samples]))
+                ref_toks_list = [c.lower().split() for c in ref_texts]
+                cand_toks = gen_text.lower().split()
+                bleu4 = compute_sentence_bleu(ref_toks_list, cand_toks, max_n=4)
+
+                generated_samples.append({
+                    "image_id": r["image_id"],
+                    "generated": gen_text,
+                    "references": ref_texts,
+                    "bleu4": bleu4
+                })
+
+        mean_bleu4 = float(np.mean([s["bleu4"] for s in generated_samples]))
 
     return {
         "mode": mode,
@@ -674,7 +679,7 @@ def main():
                 res = train_and_evaluate(
                     mode="real", seed=s, lr=lr, records=records,
                     features_dict=features_dict, qwen_model=qwen_model, tokenizer=tokenizer,
-                    device=device, num_steps=min(200, args.steps), val_every=100
+                    device=device, num_steps=min(200, args.steps), val_every=100, eval_test=False
                 )
                 val_scores.append(res["final_val_loss"])
             mean_vl = float(np.mean(val_scores))

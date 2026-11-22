@@ -306,11 +306,13 @@ def conduct_norm_audit(features_dict, qwen_model, projector):
     print("=" * 90)
 
     # 1. CLIP Features Norm
-    clip_sample = next(iter(features_dict.values())).float() # [64, 768]
+    device = qwen_model.device
+    clip_sample = next(iter(features_dict.values())).float().to(device) # [64, 768]
     clip_norms = torch.norm(clip_sample, p=2, dim=-1) # [64]
     mean_clip_norm = clip_norms.mean().item()
 
     # 2. Projector Output Norm
+    projector = projector.to(device)
     with torch.no_grad():
         proj_out = projector(clip_sample.unsqueeze(0)).squeeze(0) # [64, 896]
         proj_norms = torch.norm(proj_out, p=2, dim=-1) # [64]
@@ -556,7 +558,7 @@ def main():
     # 3. Load Qwen2.5-0.5B Backbone
     print(f"Loading Qwen2.5-0.5B backbone from {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    qwen_model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float32).to(device)
+    qwen_model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float32).to(device)
     qwen_model.eval()
     qwen_model.requires_grad_(False) # 100% frozen backbone
 

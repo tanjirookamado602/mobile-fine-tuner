@@ -499,8 +499,10 @@ def train_and_evaluate(
         labels[:, start_resp:end_resp] = tot_ids[:, len(p_ids):]
 
         loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1), ignore_index=-100)
-        loss.backward()
-        optimizer.step()
+        if mode != "text_only":
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(projector.parameters(), max_norm=1.0)
+            optimizer.step()
 
         loss_val = loss.item()
         step_losses.append(loss_val)
@@ -661,7 +663,7 @@ def main():
                 "val_losses": [r["final_val_loss"] for r in full_benchmark_results[mode]],
                 "step0_val_losses": [r["step0_val_loss"] for r in full_benchmark_results[mode]],
                 "mean_test_loss": float(np.mean([r["final_test_loss"] for r in full_benchmark_results[mode]])),
-                "test_spread": float(np.ptp([r["final_test_loss"] for r in full_benchmark_results[mode]]))
+                "test_spread": float(np.max([r["final_test_loss"] for r in full_benchmark_results[mode]]) - np.min([r["final_test_loss"] for r in full_benchmark_results[mode]]))
             } for mode in modes
         },
         "created_at": datetime.now().isoformat()

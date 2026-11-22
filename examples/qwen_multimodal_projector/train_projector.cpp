@@ -331,11 +331,11 @@ int main(int argc, char** argv) {
             int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
             int64_t prefix_len = (mode == "text_only") ? 0 : num_tokens;
             for (int64_t i = 0; i < pred_seq; ++i) {
-                if (i < prefix_len) {
+                if (i < prefix_len - 1) {
                     tgt_ptr[i] = -100;
                 } else {
-                    int64_t tidx = i - prefix_len;
-                    tgt_ptr[i] = (tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
+                    int64_t tidx = i - prefix_len + 1;
+                    tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
                 }
             }
             auto loss = cross_entropy_loss(flat_l, targets, "mean");
@@ -403,11 +403,11 @@ int main(int argc, char** argv) {
         auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
         int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
         for (int64_t i = 0; i < pred_seq; ++i) {
-            if (i < prefix_len) {
+            if (i < prefix_len - 1) {
                 tgt_ptr[i] = -100;
             } else {
-                int64_t tidx = i - prefix_len;
-                tgt_ptr[i] = (tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
+                int64_t tidx = i - prefix_len + 1;
+                tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
             }
         }
 

@@ -58,17 +58,20 @@ def setup_environment(use_drive=True):
 
     output_base = "./colab_artifacts"
     if use_drive:
-        try:
-            from google.colab import drive
-            drive_mount_point = "/content/drive"
-            if not os.path.exists(drive_mount_point):
-                print("Mounting Google Drive...")
-                drive.mount(drive_mount_point)
+        drive_mount_point = "/content/drive"
+        if os.path.exists(os.path.join(drive_mount_point, "MyDrive")):
             output_base = os.path.join(drive_mount_point, "MyDrive", "MobileFineTuner_Colab")
-            print(f"Google Drive mounted. Output directory: {output_base}")
-        except ImportError:
-            print("Not running in Google Colab. Using local directory for artifacts.")
-            output_base = "./colab_artifacts"
+            print(f"Using existing Google Drive mount: {output_base}")
+        else:
+            try:
+                from google.colab import drive
+                print("Attempting Google Drive mount...")
+                drive.mount(drive_mount_point)
+                output_base = os.path.join(drive_mount_point, "MyDrive", "MobileFineTuner_Colab")
+                print(f"Google Drive mounted: {output_base}")
+            except Exception as e:
+                print(f"Note: Google Drive mount skipped ({e}). Saving artifacts locally to {output_base}")
+                output_base = "./colab_artifacts"
 
     os.makedirs(output_base, exist_ok=True)
     return device, output_base

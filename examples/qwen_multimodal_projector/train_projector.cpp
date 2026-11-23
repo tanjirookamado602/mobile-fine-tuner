@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <malloc.h>
+#include <unistd.h>
 
 using namespace ops;
 
@@ -26,6 +27,15 @@ std::string get_wall_time_iso() {
     std::ostringstream oss;
     oss << std::put_time(&bt, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0') << std::setw(3) << ms.count();
     return oss.str();
+}
+
+double get_rss_mb() {
+    std::ifstream statm("/proc/self/statm");
+    if (!statm.is_open()) return 0.0;
+    long total_pages = 0, resident_pages = 0;
+    statm >> total_pages >> resident_pages;
+    long page_size = sysconf(_SC_PAGESIZE);
+    return (resident_pages * page_size) / (1024.0 * 1024.0);
 }
 
 // Simple JSON parser for jsonl lines
@@ -154,42 +164,163 @@ TensorPtr lookup_embeds(const TensorPtr& weight, const TensorPtr& indices) {
     return out;
 }
 
-// Multimodal Visual Projector: 768 -> 896
+// Multimodal Visual Projector: 768 -> 896 (Supports 2-Layer GELU MLP or Linear Projection)
 class MultimodalProjector {
 public:
-    TensorPtr W_; // [896, 768]
-    TensorPtr b_; // [896]
+    std::string arch_;
     int in_dim_;
     int out_dim_;
+    int num_tokens_;
+    float scale_;
 
-    MultimodalProjector(int in_dim = 768, int out_dim = 896)
-        : in_dim_(in_dim), out_dim_(out_dim) {
-        // Xavier normal initialization
-        float stddev = std::sqrt(2.0f / (in_dim + out_dim));
-        W_ = randn({out_dim, in_dim}, kFloat32, kCPU);
-        float* w_ptr = static_cast<float*>(W_->data_ptr());
-        for (size_t i = 0; i < W_->numel(); ++i) {
-            w_ptr[i] *= stddev;
+    // LayerNorm on input
+    TensorPtr ln_w_;
+    TensorPtr ln_b_;
+
+    // Layer 1
+    TensorPtr W1_;
+    TensorPtr b1_;
+
+    // Layer 2 (for 2-layer GELU MLP)
+    TensorPtr W2_;
+    TensorPtr b2_;
+
+    // Positional embedding (capacity matched to soft prompt)
+    TensorPtr pos_embed_;
+
+    MultimodalProjector(int in_dim = 768, int out_dim = 896, int num_tokens = 64,
+                        const std::string& arch = "mlp", unsigned seed = 42)
+        : arch_(arch), in_dim_(in_dim), out_dim_(out_dim), num_tokens_(num_tokens) {
+
+        std::mt19937 gen(seed);
+        float target_norm = 0.4633f;
+        scale_ = target_norm / std::sqrt(static_cast<float>(out_dim_));
+
+        // LayerNorm: init weights=1, bias=0
+        ln_w_ = ones({in_dim}, kFloat32, kCPU);
+        ln_b_ = zeros({in_dim}, kFloat32, kCPU);
+        ln_w_->set_requires_grad(true);
+        ln_b_->set_requires_grad(true);
+
+        // Layer 1: [out_dim, in_dim]
+        // Xavier uniform: [-limit, limit], limit = sqrt(6 / (fan_in + fan_out))
+        float limit1 = std::sqrt(6.0f / (in_dim + out_dim));
+        std::uniform_real_distribution<float> dist1(-limit1, limit1);
+        W1_ = zeros({out_dim, in_dim}, kFloat32, kCPU);
+        float* w1_ptr = static_cast<float*>(W1_->data_ptr());
+        for (size_t i = 0; i < W1_->numel(); ++i) {
+            w1_ptr[i] = dist1(gen);
         }
-        b_ = zeros({out_dim}, kFloat32, kCPU);
-        W_->set_requires_grad(true);
-        b_->set_requires_grad(true);
+        b1_ = zeros({out_dim}, kFloat32, kCPU);
+        W1_->set_requires_grad(true);
+        b1_->set_requires_grad(true);
+
+        if (arch_ == "mlp") {
+            // Layer 2: [out_dim, out_dim]
+            float limit2 = std::sqrt(6.0f / (out_dim + out_dim));
+            std::uniform_real_distribution<float> dist2(-limit2, limit2);
+            W2_ = zeros({out_dim, out_dim}, kFloat32, kCPU);
+            float* w2_ptr = static_cast<float*>(W2_->data_ptr());
+            for (size_t i = 0; i < W2_->numel(); ++i) {
+                w2_ptr[i] = dist2(gen);
+            }
+            b2_ = zeros({out_dim}, kFloat32, kCPU);
+            W2_->set_requires_grad(true);
+            b2_->set_requires_grad(true);
+        }
+
+        // Positional Embedding: [1, num_tokens, out_dim]
+        pos_embed_ = zeros({1, static_cast<int64_t>(num_tokens_), static_cast<int64_t>(out_dim_)}, kFloat32, kCPU);
+        std::normal_distribution<float> pdist(0.0f, scale_);
+        float* pos_ptr = static_cast<float*>(pos_embed_->data_ptr());
+        for (size_t i = 0; i < pos_embed_->numel(); ++i) {
+            pos_ptr[i] = pdist(gen);
+        }
+        pos_embed_->set_requires_grad(true);
     }
 
     TensorPtr forward(const TensorPtr& visual_tokens) {
-        // visual_tokens: [B, 64, 768]
-        // matmul_rhs_T: [B, 64, 768] * [896, 768]^T -> [B, 64, 896]
-        auto proj = matmul_rhs_T(visual_tokens, W_);
-        return add(proj, b_);
+        // visual_tokens: [B, num_tokens, in_dim]
+        // 1. LayerNorm
+        auto ln_out = layer_norm(visual_tokens, ln_w_, ln_b_);
+
+        // 2. Layer 1
+        auto h1 = add(matmul_rhs_T(ln_out, W1_), b1_);
+
+        TensorPtr out_tokens;
+        if (arch_ == "mlp") {
+            // 3. GELU
+            auto act = gelu(h1);
+            // 4. Layer 2
+            auto h2 = add(matmul_rhs_T(act, W2_), b2_);
+            // 5. Scaled to Qwen embedding norm
+            out_tokens = mul(h2, scale_);
+        } else {
+            out_tokens = mul(h1, scale_);
+        }
+
+        // 6. Add Positional Embedding
+        return add(out_tokens, pos_embed_);
     }
 
     std::vector<TensorPtr> parameters() {
-        return {W_, b_};
+        if (arch_ == "mlp") {
+            return {ln_w_, ln_b_, W1_, b1_, W2_, b2_, pos_embed_};
+        } else {
+            return {ln_w_, ln_b_, W1_, b1_, pos_embed_};
+        }
+    }
+
+    size_t num_parameters() const {
+        size_t total = ln_w_->numel() + ln_b_->numel() + W1_->numel() + b1_->numel() + pos_embed_->numel();
+        if (arch_ == "mlp") {
+            total += W2_->numel() + b2_->numel();
+        }
+        return total;
     }
 
     void zero_grad() {
-        W_->zero_grad();
-        b_->zero_grad();
+        for (auto& p : parameters()) {
+            if (p) p->zero_grad();
+        }
+    }
+};
+
+// Freely learnable soft prompt baseline (no image input)
+class LearnedPrefixModule {
+public:
+    TensorPtr prefix_;
+    int num_tokens_;
+    int dim_;
+
+    LearnedPrefixModule(int num_tokens = 64, int dim = 896, unsigned seed = 42)
+        : num_tokens_(num_tokens), dim_(dim) {
+        float init_std = 0.4633f / std::sqrt(static_cast<float>(dim_));
+        std::mt19937 gen(seed);
+        std::normal_distribution<float> dist(0.0f, init_std);
+
+        prefix_ = zeros({1, static_cast<int64_t>(num_tokens_), static_cast<int64_t>(dim_)}, kFloat32, kCPU);
+        float* ptr = static_cast<float*>(prefix_->data_ptr());
+        for (size_t i = 0; i < prefix_->numel(); ++i) {
+            ptr[i] = dist(gen);
+        }
+        prefix_->set_requires_grad(true);
+    }
+
+    TensorPtr forward() {
+        return prefix_;
+    }
+
+    std::vector<TensorPtr> parameters() {
+        return {prefix_};
+    }
+
+    size_t num_parameters() const {
+        return prefix_->numel();
+    }
+
+    void zero_grad() {
+        if (prefix_) prefix_->zero_grad();
     }
 };
 
@@ -205,7 +336,7 @@ public:
 
     explicit SimpleAdam(float lr = 1e-3f) : lr_(lr) {}
 
-    void step(const std::vector<TensorPtr>& params) {
+    void step(const std::vector<TensorPtr>& params, float current_lr) {
         step_++;
         float bc1 = 1.0f - std::pow(beta1_, step_);
         float bc2 = 1.0f - std::pow(beta2_, step_);
@@ -226,41 +357,49 @@ public:
                 v[i] = beta2_ * v[i] + (1.0f - beta2_) * g * g;
                 float m_hat = m[i] / bc1;
                 float v_hat = v[i] / bc2;
-                p_ptr[i] -= lr_ * m_hat / (std::sqrt(v_hat) + eps_);
+                p_ptr[i] -= current_lr * m_hat / (std::sqrt(v_hat) + eps_);
             }
         }
     }
 };
 
 int main(int argc, char** argv) {
-    std::string mode = "real"; // real, zeroed, shuffled, text_only
+    std::string mode = "real"; // real, zeroed, shuffled, text_only, learned_prefix
+    std::string arch = "mlp";  // mlp, linear
     std::string model_dir = "models/Qwen2.5-0.5B";
     std::string features_path = "data/vision_features/visual_features.npy";
     std::string train_path = "data/multimodal_splits/train.jsonl";
     std::string val_path = "data/multimodal_splits/val.jsonl";
     int num_steps = 20;
     int val_every = 5;
+    int accum_steps = 1;
     float lr = 1e-3f;
+    unsigned seed = 42;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--mode" && i + 1 < argc) mode = argv[++i];
+        else if (arg == "--arch" && i + 1 < argc) arch = argv[++i];
         else if (arg == "--steps" && i + 1 < argc) num_steps = std::stoi(argv[++i]);
         else if (arg == "--val_every" && i + 1 < argc) val_every = std::stoi(argv[++i]);
+        else if (arg == "--accum_steps" && i + 1 < argc) accum_steps = std::stoi(argv[++i]);
         else if (arg == "--lr" && i + 1 < argc) lr = std::stof(argv[++i]);
+        else if (arg == "--seed" && i + 1 < argc) seed = std::stoul(argv[++i]);
     }
 
     std::cout << "========================================================================\n";
     std::cout << "  MobileFineTuner: Multimodal Visual Projector Training Program        \n";
-    std::cout << "  Architecture: Trainable Projector (768 -> 896) + Frozen Qwen2.5-0.5B  \n";
-    std::cout << "  Execution Mode: [" << mode << "] | Steps: " << num_steps << " | LR: " << lr << "\n";
+    std::cout << "  Architecture: " << (arch == "mlp" ? "2-Layer GELU MLP" : "Linear") 
+              << " Projector (768 -> 896) + Frozen Qwen2.5-0.5B\n";
+    std::cout << "  Execution Mode: [" << mode << "] | Steps: " << num_steps 
+              << " | Accum: " << accum_steps << " | LR: " << lr << " | Seed: " << seed << "\n";
     std::cout << "========================================================================\n";
 
     // 1. Load Visual Features
     std::vector<float> visual_features;
     size_t num_imgs = 0, num_tokens = 64, feat_dim = 768;
     bool has_features = load_npy_features(features_path, visual_features, num_imgs, num_tokens, feat_dim);
-    if (!has_features && mode == "real") {
+    if (!has_features && (mode == "real" || mode == "shuffled")) {
         std::cerr << "Visual features not found at " << features_path << ". Creating synthetic test features.\n";
         num_imgs = 50;
         visual_features.resize(num_imgs * num_tokens * feat_dim, 0.05f);
@@ -290,10 +429,30 @@ int main(int argc, char** argv) {
     auto qwen = model->qwen();
     qwen->freeze_base(); // CRITICAL: Freezes all 290 backbone parameters
 
-    // 4. Instantiate Trainable Projector and Optimizer
-    MultimodalProjector projector(768, 896);
+    // 4. Instantiate Trainable Projector / Module and Optimizer
+    std::unique_ptr<MultimodalProjector> projector;
+    std::unique_ptr<LearnedPrefixModule> learned_prefix;
+    std::vector<TensorPtr> trainable_params;
+
+    if (mode == "learned_prefix") {
+        learned_prefix = std::make_unique<LearnedPrefixModule>(num_tokens, 896, seed);
+        trainable_params = learned_prefix->parameters();
+        std::cout << "[" << get_wall_time_iso() << "] Initialized Learned Prefix Soft-Prompt (" 
+                  << learned_prefix->num_parameters() << " parameters).\n";
+    } else {
+        projector = std::make_unique<MultimodalProjector>(768, 896, num_tokens, arch, seed);
+        trainable_params = projector->parameters();
+        std::cout << "[" << get_wall_time_iso() << "] Initialized " 
+                  << (arch == "mlp" ? "2-Layer GELU MLP" : "Linear") << " Projector (" 
+                  << projector->num_parameters() << " parameters).\n";
+    }
+
     SimpleAdam optimizer(lr);
-    std::cout << "[" << get_wall_time_iso() << "] Initialized Multimodal Projector (768 -> 896, 688,128 parameters).\n";
+
+    auto zero_all_grad = [&]() {
+        if (projector) projector->zero_grad();
+        if (learned_prefix) learned_prefix->zero_grad();
+    };
 
     // Helper to evaluate validation loss
     auto evaluate_val = [&](int step) {
@@ -310,13 +469,16 @@ int main(int argc, char** argv) {
             TensorPtr spliced;
             if (mode == "text_only") {
                 spliced = text_embeds;
+            } else if (mode == "learned_prefix") {
+                auto p_tokens = learned_prefix->forward();
+                spliced = concat(std::vector<TensorPtr>{p_tokens, text_embeds}, 1);
             } else {
                 auto v_tensor = zeros({1, static_cast<int64_t>(num_tokens), static_cast<int64_t>(feat_dim)}, kFloat32, kCPU);
                 if (mode == "real" || mode == "shuffled") {
                     size_t img_idx = (mode == "shuffled") ? ((vi + 17) % num_imgs) : (vi % num_imgs);
                     std::memcpy(v_tensor->data_ptr(), visual_features.data() + img_idx * num_tokens * feat_dim, num_tokens * feat_dim * sizeof(float));
                 }
-                auto p_tokens = projector.forward(v_tensor);
+                auto p_tokens = projector->forward(v_tensor);
                 spliced = concat(std::vector<TensorPtr>{p_tokens, text_embeds}, 1);
             }
 
@@ -348,12 +510,14 @@ int main(int argc, char** argv) {
 
     // 5. Training Loop
     std::cout << "\n------------------------------------------------------------------------\n";
-    std::cout << "Starting Training Steps (Projector Only, Mode=" << mode << ")...\n";
+    std::cout << "Starting Training Steps (" << arch << " Projector, Mode=" << mode << ")...\n";
     std::cout << "------------------------------------------------------------------------\n";
 
     evaluate_val(0); // Initial zero-shot validation loss
 
-    std::mt19937 rng(1337);
+    std::mt19937 rng(seed);
+    zero_all_grad();
+
     for (int step = 1; step <= num_steps; ++step) {
         auto t_step0 = std::chrono::high_resolution_clock::now();
         const auto& sample = train_data[(step - 1) % train_data.size()];
@@ -371,6 +535,10 @@ int main(int argc, char** argv) {
         if (mode == "text_only") {
             spliced = text_embeds;
             prefix_len = 0;
+        } else if (mode == "learned_prefix") {
+            prefix_len = num_tokens;
+            auto proj_tokens = learned_prefix->forward();
+            spliced = concat(std::vector<TensorPtr>{proj_tokens, text_embeds}, 1);
         } else {
             prefix_len = num_tokens;
             auto v_tensor = zeros({1, static_cast<int64_t>(num_tokens), static_cast<int64_t>(feat_dim)}, kFloat32, kCPU);
@@ -382,9 +550,7 @@ int main(int argc, char** argv) {
                 std::memcpy(v_tensor->data_ptr(), visual_features.data() + img_idx * num_tokens * feat_dim, num_tokens * feat_dim * sizeof(float));
             } // if "zeroed", v_tensor remains zeros
 
-            // Project visual tokens: [1, 64, 768] -> [1, 64, 896]
-            auto proj_tokens = projector.forward(v_tensor);
-            // Splice prefix + text embeddings via Concat operator
+            auto proj_tokens = projector->forward(v_tensor);
             spliced = concat(std::vector<TensorPtr>{proj_tokens, text_embeds}, 1);
         }
 
@@ -414,22 +580,30 @@ int main(int argc, char** argv) {
         auto loss = cross_entropy_loss(flat_l, targets, "mean");
         float loss_val = static_cast<const float*>(loss->data_ptr())[0];
 
-        // Backward pass
-        projector.zero_grad();
+        // Backward pass (with gradient accumulation scaling)
         auto t_bwd0 = std::chrono::high_resolution_clock::now();
-        loss->backward();
+        if (accum_steps > 1) {
+            auto grad_scale = full(loss->shape(), 1.0f / accum_steps, kFloat32, kCPU);
+            loss->backward(grad_scale);
+        } else {
+            loss->backward();
+        }
         auto t_bwd1 = std::chrono::high_resolution_clock::now();
         double bwd_ms = std::chrono::duration<double, std::milli>(t_bwd1 - t_bwd0).count();
 
-        // Optimizer step on Projector
-        optimizer.step(projector.parameters());
-        projector.zero_grad();
+        // Optimizer step every accum_steps or last step
+        if (step % accum_steps == 0 || step == num_steps) {
+            optimizer.step(trainable_params, lr);
+            zero_all_grad();
+        }
 
         auto t_step1 = std::chrono::high_resolution_clock::now();
         double total_ms = std::chrono::duration<double, std::milli>(t_step1 - t_step0).count();
+        double rss_mb = get_rss_mb();
 
         std::cout << "[" << get_wall_time_iso() << "] Step " << std::setw(2) << step << "/" << num_steps 
                   << " | Loss = " << std::fixed << std::setprecision(4) << loss_val 
+                  << " | RSS = " << std::fixed << std::setprecision(1) << rss_mb << " MB"
                   << " | Fwd = " << std::setw(6) << std::setprecision(1) << fwd_ms << " ms"
                   << " | Bwd = " << std::setw(6) << bwd_ms << " ms"
                   << " | Total = " << std::setw(6) << total_ms << " ms\n";
@@ -442,7 +616,7 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "\n========================================================================\n";
-    std::cout << "SUCCESS: 20-Step Projector Training Smoke Test Completed.\n";
+    std::cout << "SUCCESS: Multimodal Projector Training Completed Successfully.\n";
     std::cout << "========================================================================\n";
     return 0;
 }

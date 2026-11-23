@@ -14,7 +14,8 @@ target_include_directories(train_projector PRIVATE
 
 target_link_libraries(train_projector PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../operator/build/lib/liboperators.a
-    /home/assassinaj602/openblas_install/lib/libopenblas.a
+    /home/assassinaj602/openblas_install/lib/libopenblas.so
+    gomp
     pthread
     dl
 )

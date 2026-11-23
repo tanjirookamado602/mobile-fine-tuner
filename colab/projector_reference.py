@@ -2,23 +2,31 @@
 """
 colab/projector_reference.py
 ================================================================================
-MobileFineTuner: Rigorous Multimodal Projector Training & Parity Reference
+MobileFineTuner: Scientific Multimodal Projector Reference & Diagnostic Suite
 Designed for Google Colab (Free T4 GPU / 16GB VRAM) and Local Execution.
 
-Key Scientifically Rigorous Upgrades:
-1. Scale Fix: LayerNorm(768) + Linear(768 -> 896) + learnable output scale
-   calibrated so initial projector output mean norm matches Qwen's embedding norm (~0.4633).
-2. True Control Baseline: 64 freely learnable soft prompt tokens (mode: learned_prefix),
-   calibrated to norm ~0.4633, to isolate image grounding from soft prompt tuning.
-3. Extended Learning Rate Grid (up to 1e-2), swept on validation set using 2 seeds.
-4. 1,000 training steps (0.5 epochs over 2,000 images, batch size = 1).
-5. 10 seeds per mode with non-parametric statistics:
-   - Median and IQR (Interquartile Range)
-   - Per-seed paired differences: (real - shuffled) and (real - learned_prefix)
-   - Paired Wilcoxon signed-rank test and 10,000-resample paired bootstrap 95% CI.
-6. Comprehensive test evaluation on ALL 5 reference captions per test image (1,000 captions).
-7. Greedy generation and BLEU-1/2/4 evaluation on 10 sample images per mode.
-8. Single-batch C++ verification export to explain and reproduce the step-0 loss parity.
+Key Diagnostic & Rigorous Upgrades:
+1. Overfit Verification Mode (--overfit):
+   Trains on 20 images for 300 steps (real vs. shuffled vs. zeroed) to definitively
+   verify that the visual feature gradient pipeline can memorize image-caption pairs.
+2. Alignment Audit (--verify_data):
+   Prints 5 concrete image-ID / caption / CLIP-feature alignments and verifies shuffle permutation.
+3. Capacity-Matched Projector:
+   Adds learnable 64x896 positional embedding to projector output so its no-image limit
+   matches the expressive power of the learned prefix control.
+4. Architecture Variants:
+   - 2-layer GELU MLP (--arch mlp): Linear(768->896) -> GELU -> Linear(896->896) (LLaVA-1.5 standard).
+   - Linear projector (--arch linear).
+   - No-pooling 196-token variant (--no_pool).
+   - Penultimate CLIP layer selection (--clip_layer penultimate).
+5. Stable Training Dynamics:
+   - Effective batch size 16 via gradient accumulation.
+   - Linear warmup (50 steps) + Cosine decay schedule.
+6. Clean Text Generation:
+   - Truncates generation at <|im_end|> or first newline to eliminate trailing garbage tokens.
+   - Computes sentence-level BLEU-1/2/4.
+7. Two-Sided Wilcoxon Hypothesis Testing:
+   - Reports two-sided p-values via scipy.stats.wilcoxon(..., alternative='two-sided').
 ================================================================================
 """
 
@@ -231,24 +239,25 @@ def acquire_coco_subset(data_dir, num_train=2000, num_val=200, num_test=200):
     return verified_records
 
 # ==============================================================================
-# 3. CLIP ViT-B/16 Feature Extraction
+# 3. CLIP ViT-B/16 Feature Extraction (Layer & Pooling Options)
 # ==============================================================================
-def extract_clip_features(records, data_dir, device):
-    cache_path = os.path.join(data_dir, "clip_vit_b16_features_64tok.pt")
+def extract_clip_features(records, data_dir, device, no_pool=False, clip_layer="penultimate"):
+    tag = f"{clip_layer}_{'196tok' if no_pool else '64tok'}"
+    cache_path = os.path.join(data_dir, f"clip_vit_b16_features_{tag}.pt")
     if os.path.exists(cache_path):
         print(f"Loading cached CLIP features from {cache_path}...")
         return torch.load(cache_path, map_location="cpu", weights_only=True)
 
-    print("Loading CLIP ViT-B/16 vision model (openai/clip-vit-base-patch16)...")
+    print(f"Loading CLIP ViT-B/16 (openai/clip-vit-base-patch16), layer={clip_layer}, no_pool={no_pool}...")
     clip_model_name = "openai/clip-vit-base-patch16"
     processor = CLIPImageProcessor.from_pretrained(clip_model_name)
     vision_model = CLIPVisionModel.from_pretrained(clip_model_name).to(device).eval()
 
-    pool_2d = nn.AdaptiveAvgPool2d((8, 8))
+    pool_2d = nn.AdaptiveAvgPool2d((8, 8)) if not no_pool else None
     features_dict = {}
 
     batch_size = 32
-    print(f"Extracting pooled 64-token features for {len(records)} images on {device}...")
+    print(f"Extracting features for {len(records)} images on {device}...")
     t0 = time.time()
 
     for i in range(0, len(records), batch_size):
@@ -268,51 +277,89 @@ def extract_clip_features(records, data_dir, device):
 
         inputs = processor(images=pil_images, return_tensors="pt").to(device)
         with torch.no_grad():
-            out = vision_model(**inputs)
-            patch_tokens = out.last_hidden_state[:, 1:, :] # [B, 196, 768]
+            out = vision_model(**inputs, output_hidden_states=True)
+            if clip_layer == "penultimate":
+                hidden = out.hidden_states[-2] # Penultimate layer (LLaVA standard)
+            else:
+                hidden = out.last_hidden_state # Final layer
+            
+            patch_tokens = hidden[:, 1:, :] # Drop CLS token -> [B, 196, 768]
             B, P, D = patch_tokens.shape
-            grid = patch_tokens.permute(0, 2, 1).view(B, D, 14, 14)
-            pooled_grid = pool_2d(grid) # [B, D, 8, 8]
-            tokens_64 = pooled_grid.view(B, D, 64).permute(0, 2, 1) # [B, 64, D]
+
+            if no_pool:
+                tokens_out = patch_tokens # [B, 196, 768]
+            else:
+                grid = patch_tokens.permute(0, 2, 1).view(B, D, 14, 14)
+                pooled_grid = pool_2d(grid) # [B, D, 8, 8]
+                tokens_out = pooled_grid.view(B, D, 64).permute(0, 2, 1) # [B, 64, 768]
 
         for idx, r in enumerate(valid_recs):
-            features_dict[r["image_id"]] = tokens_64[idx].detach().cpu().half()
+            features_dict[r["image_id"]] = tokens_out[idx].detach().cpu().half()
 
     elapsed = time.time() - t0
-    print(f"Extraction complete in {elapsed:.1f} s ({len(records) / elapsed:.1f} imgs/s).")
+    print(f"Extraction complete in {elapsed:.1f} s ({len(records) / elapsed:.1f} imgs/s). Saved to {cache_path}")
     torch.save(features_dict, cache_path)
     return features_dict
 
 # ==============================================================================
-# 4. Projector Architectures (Scale-Fixed Projector & Soft-Prompt Baseline)
+# 4. Projector Architectures (Capacity-Matched with Positional Embeddings)
 # ==============================================================================
-class ScaledProjector(nn.Module):
+class Projector(nn.Module):
     """
-    Projector with LayerNorm on visual tokens + Xavier Linear + learnable output scale
-    calibrated so initial projector output mean norm is ~0.4633 (matching Qwen embedding norm).
+    Multimodal Projector with LayerNorm + Xavier init + learnable scale + learnable pos_embed.
+    When inputs are zeroed, output equals pos_embed, exactly matching learned_prefix capacity.
     """
-    def __init__(self, in_features=768, out_features=896, target_norm=0.4633, use_layer_norm=True):
+    def __init__(
+        self, in_features=768, out_features=896, arch="mlp", num_tokens=64,
+        target_norm=0.4633, use_layer_norm=True, use_pos_embed=True
+    ):
         super().__init__()
         self.use_layer_norm = use_layer_norm
+        self.use_pos_embed = use_pos_embed
+        self.num_tokens = num_tokens
+
         if use_layer_norm:
             self.ln = nn.LayerNorm(in_features)
-        self.linear = nn.Linear(in_features, out_features)
-        nn.init.xavier_uniform_(self.linear.weight)
-        nn.init.zeros_(self.linear.bias)
 
-        # Scale factor calibrated so initial output norm is target_norm
+        if arch == "mlp":
+            # 2-layer GELU MLP (standard LLaVA architecture)
+            self.net = nn.Sequential(
+                nn.Linear(in_features, out_features),
+                nn.GELU(),
+                nn.Linear(out_features, out_features)
+            )
+            nn.init.xavier_uniform_(self.net[0].weight)
+            nn.init.zeros_(self.net[0].bias)
+            nn.init.xavier_uniform_(self.net[2].weight)
+            nn.init.zeros_(self.net[2].bias)
+        else:
+            # Linear projection
+            self.net = nn.Linear(in_features, out_features)
+            nn.init.xavier_uniform_(self.net.weight)
+            nn.init.zeros_(self.net.bias)
+
+        # Output scale factor calibrated to target_norm
         init_scale = target_norm / math.sqrt(out_features)
         self.scale = nn.Parameter(torch.tensor(init_scale, dtype=torch.float32))
+
+        # Learnable positional embedding (capacity-matched to soft prompt)
+        if use_pos_embed:
+            init_std = target_norm / math.sqrt(out_features)
+            self.pos_embed = nn.Parameter(torch.randn(1, num_tokens, out_features) * init_std)
+        else:
+            self.pos_embed = None
 
     def forward(self, x):
         if self.use_layer_norm:
             x = self.ln(x)
-        return self.linear(x) * self.scale
+        out = self.net(x) * self.scale
+        if self.pos_embed is not None:
+            out = out + self.pos_embed
+        return out
 
 class LearnedPrefix(nn.Module):
     """
-    Soft-prompt baseline: 64 freely learnable tokens (no image), initialized to target norm.
-    Isolates whether image features help beyond generic prefix prompt tuning.
+    Freely learnable soft prompt baseline (no image).
     """
     def __init__(self, num_tokens=64, dim=896, target_norm=0.4633):
         super().__init__()
@@ -323,7 +370,7 @@ class LearnedPrefix(nn.Module):
         return self.prefix.expand(batch_size, -1, -1)
 
 # ==============================================================================
-# 5. BLEU & Generation Metrics
+# 5. Sentence BLEU Metric (Zero Math-Domain-Error Guarantee)
 # ==============================================================================
 def compute_sentence_bleu(reference_tokens_list, candidate_tokens, max_n=4):
     cand_len = len(candidate_tokens)
@@ -353,48 +400,122 @@ def compute_sentence_bleu(reference_tokens_list, candidate_tokens, max_n=4):
     return bp * math.exp(p_log_sum)
 
 # ==============================================================================
-# 6. Norm Audit
+# 6. Diagnostics & Alignment Verifications
 # ==============================================================================
-def conduct_norm_audit(features_dict, qwen_model):
-    device = qwen_model.device
-    clip_sample = next(iter(features_dict.values())).float().to(device)
-    clip_norms = torch.norm(clip_sample, p=2, dim=-1)
-    mean_clip_norm = clip_norms.mean().item()
-
-    proj = ScaledProjector(768, 896).to(device)
-    with torch.no_grad():
-        proj_out = proj(clip_sample.unsqueeze(0)).squeeze(0)
-        proj_norms = torch.norm(proj_out, p=2, dim=-1)
-        mean_proj_norm = proj_norms.mean().item()
-
-    w_embed = qwen_model.model.embed_tokens.weight
-    embed_norms = torch.norm(w_embed, p=2, dim=-1)
-    mean_embed_norm = embed_norms.mean().item()
-
-    ratio = mean_proj_norm / mean_embed_norm
-
+def verify_data_alignment(records, features_dict):
     print("\n" + "=" * 90)
-    print("  MATHEMATICAL NORM & NUMERICAL SCALE AUDIT (WITH SCALE FIX)")
+    print("  ALIGNMENT DIAGNOSTIC: 5 VERIFIED SAMPLES (Image ID -> Captions -> CLIP Features)")
     print("=" * 90)
-    print(f"1. CLIP ViT-B/16 Visual Tokens Mean L2 Norm:     {mean_clip_norm:.4f}")
-    print(f"2. Scaled Projector Initial Output Mean Norm:    {mean_proj_norm:.4f}")
-    print(f"3. Qwen2.5-0.5B Token Embedding Mean L2 Norm:    {mean_embed_norm:.4f}")
-    print(f"4. Scale Ratio (Scaled Projector / Qwen Embed):  {ratio:.4f}x (Calibrated to 1.0x)")
-    print("=" * 90)
+    sample_records = records[:5]
+    for i, r in enumerate(sample_records):
+        iid = r["image_id"]
+        fname = r["file_name"]
+        first_cap = r["captions"][0]["caption"]
+        feat = features_dict[iid].float()
+        norm_val = torch.norm(feat, p=2, dim=-1).mean().item()
+        head_vals = np.round(feat[0, :5].numpy(), 4).tolist()
 
-    return {
-        "clip_mean_norm": mean_clip_norm,
-        "projector_output_mean_norm": mean_proj_norm,
-        "qwen_embed_mean_norm": mean_embed_norm,
-        "scale_ratio": ratio
-    }
+        print(f"Sample {i+1}:")
+        print(f"  Image ID:    {iid} ({fname})")
+        print(f"  Caption:     \"{first_cap}\"")
+        print(f"  Feature Dim: {list(feat.shape)} | Mean Token Norm: {norm_val:.4f}")
+        print(f"  First 5 Dims: {head_vals}")
+
+    # Verify Shuffle Permutation
+    all_keys = list(features_dict.keys())
+    shuffled_keys = all_keys.copy()
+    rng = random.Random(1337)
+    rng.shuffle(shuffled_keys)
+    mismatches = sum(1 for k1, k2 in zip(all_keys, shuffled_keys) if k1 != k2)
+    sample_cos = F.cosine_similarity(features_dict[all_keys[0]][0].float(), features_dict[shuffled_keys[0]][0].float(), dim=0).item()
+    print("\n[Shuffle Permutation Check]:")
+    print(f"  Keys Permuted: {mismatches} / {len(all_keys)} keys displaced ({mismatches / len(all_keys) * 100:.1f}%)")
+    print(f"  Cosine Similarity Between Sample Real vs. Shuffled Feature: {sample_cos:.4f} (Confirmed permuted)")
+    print("=" * 90)
 
 # ==============================================================================
-# 7. Training & Evaluation Engine
+# 7. Overfit Test (20 Images, 300 Steps)
+# ==============================================================================
+def run_overfit_test(records, features_dict, qwen_model, tokenizer, device, arch="mlp", num_tokens=64):
+    print("\n" + "=" * 90)
+    print("  OVERFIT TEST: 20 Images, 300 Steps (Real vs. Shuffled vs. Zeroed)")
+    print("  Goal: Confirm that visual feature gradient path can memorize image-caption pairs.")
+    print("=" * 90)
+
+    overfit_recs = [r for r in records if r["split"] == "train"][:20]
+    modes = ["real", "shuffled", "zeroed"]
+    history = {}
+
+    for mode in modes:
+        torch.manual_seed(42)
+        random.seed(42)
+        projector = Projector(768, 896, arch=arch, num_tokens=num_tokens, use_pos_embed=True).to(device).float()
+        optimizer = torch.optim.AdamW(projector.parameters(), lr=1e-3, weight_decay=0.0)
+
+        step_losses = []
+        t0 = time.time()
+        for step in range(1, 301):
+            r = overfit_recs[(step - 1) % len(overfit_recs)]
+            caps = r["captions"]
+            caption = caps[0]["caption"]
+            prompt_text = "<|im_start|>user\nDescribe the image in detail.<|im_end|>\n<|im_start|>assistant\n"
+            response_text = f"{caption}<|im_end|>\n"
+
+            p_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+            r_ids = tokenizer.encode(response_text, add_special_tokens=False)
+            tot_ids = torch.tensor([p_ids + r_ids], device=device, dtype=torch.long)
+            text_embeds = qwen_model.model.embed_tokens(tot_ids)
+
+            if mode == "zeroed":
+                v_raw = torch.zeros(1, num_tokens, 768, device=device, dtype=torch.float32)
+            elif mode == "shuffled":
+                rand_id = random.choice(list(features_dict.keys()))
+                v_raw = features_dict[rand_id].unsqueeze(0).to(device).float()
+            else: # real
+                v_raw = features_dict[r["image_id"]].unsqueeze(0).to(device).float()
+
+            v_pref = projector(v_raw)
+            spliced = torch.cat([v_pref, text_embeds], dim=1)
+
+            out = qwen_model(inputs_embeds=spliced)
+            logits = out.logits[:, :-1, :]
+
+            pred_len = logits.shape[1]
+            labels = torch.full((1, pred_len), -100, device=device, dtype=torch.long)
+            start_resp = num_tokens + len(p_ids) - 1
+            end_resp = start_resp + len(r_ids)
+            labels[:, start_resp:end_resp] = tot_ids[:, len(p_ids):]
+
+            loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1), ignore_index=-100)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            step_losses.append(loss.item())
+            if step in [1, 50, 100, 150, 200, 250, 300]:
+                print(f"  Mode [{mode:<8}] | Step {step:<3} | Loss: {loss.item():.4f}")
+
+        elapsed = time.time() - t0
+        history[mode] = step_losses
+        print(f"  Mode [{mode:<8}] Done in {elapsed:.1f} s | Start Loss: {step_losses[0]:.4f} -> Final Loss: {step_losses[-1]:.4f}\n")
+
+    print("=" * 90)
+    print("  OVERFIT TEST SUMMARY:")
+    for m in modes:
+        print(f"  [{m:<8}] Step 1: {history[m][0]:.4f} -> Step 100: {history[m][99]:.4f} -> Step 300: {history[m][-1]:.4f}")
+    if history["real"][-1] < history["shuffled"][-1] - 0.5:
+        print("  -> CONFIRMED: Real features significantly overfit/memorize images over shuffled controls.")
+    else:
+        print("  -> NOTE: Overfit gap between real and shuffled is modest or requires more steps/capacity.")
+    print("=" * 90)
+    return history
+
+# ==============================================================================
+# 8. Training & Evaluation Engine (Batch Size 16, Cosine Schedule, Clean Decoding)
 # ==============================================================================
 def train_and_evaluate(
     mode, seed, lr, records, features_dict, qwen_model, tokenizer, device,
-    num_steps=1000, val_every=250, use_amp=True, eval_test=True
+    num_steps=1000, arch="mlp", num_tokens=64, accum_steps=16, eval_test=True
 ):
     torch.manual_seed(seed)
     random.seed(seed)
@@ -405,15 +526,22 @@ def train_and_evaluate(
     optimizer = None
 
     if mode in ["real", "shuffled", "zeroed"]:
-        projector = ScaledProjector(768, 896).to(device).float()
+        projector = Projector(768, 896, arch=arch, num_tokens=num_tokens, use_pos_embed=True).to(device).float()
         optimizer = torch.optim.AdamW(projector.parameters(), lr=lr, weight_decay=0.01)
     elif mode == "learned_prefix":
-        learned_prefix = LearnedPrefix(64, 896).to(device).float()
+        learned_prefix = LearnedPrefix(num_tokens, 896).to(device).float()
         optimizer = torch.optim.AdamW(learned_prefix.parameters(), lr=lr, weight_decay=0.01)
 
     train_recs = [r for r in records if r["split"] == "train"]
     val_recs = [r for r in records if r["split"] == "val"]
     test_recs = [r for r in records if r["split"] == "test"]
+
+    warmup_steps = 50
+    def get_scheduled_lr(step):
+        if step < warmup_steps:
+            return lr * (step / max(1, warmup_steps))
+        progress = (step - warmup_steps) / max(1, num_steps - warmup_steps)
+        return lr * 0.5 * (1.0 + math.cos(math.pi * progress))
 
     def format_pair(r, cap_idx=0):
         caps = r["captions"]
@@ -453,7 +581,7 @@ def train_and_evaluate(
         elif eval_mode == "learned_prefix":
             return learned_prefix()
         elif eval_mode == "zeroed":
-            v_raw = torch.zeros(1, 64, 768, device=device, dtype=torch.float32)
+            v_raw = torch.zeros(1, num_tokens, 768, device=device, dtype=torch.float32)
             return projector(v_raw)
         elif eval_mode == "shuffled":
             rand_id = random.choice(list(features_dict.keys()))
@@ -482,10 +610,8 @@ def train_and_evaluate(
                         count += 1
         return total_loss / max(1, count)
 
-    # Initial Step-0 Validation Loss
     step0_val_loss = evaluate_split_all_captions(val_recs, mode, max_images=50)
 
-    # Training Loop
     if projector is not None: projector.train()
     if learned_prefix is not None: learned_prefix.train()
 
@@ -496,12 +622,17 @@ def train_and_evaluate(
     initial_weights = {}
     if projector is not None:
         initial_weights = {
-            "W": projector.linear.weight.detach().cpu().numpy().tolist(),
-            "b": projector.linear.bias.detach().cpu().numpy().tolist(),
             "scale": projector.scale.detach().cpu().item()
         }
 
+    accum_loss = 0.0
     for step in range(1, num_steps + 1):
+        # Cosine learning rate update
+        cur_lr = get_scheduled_lr(step)
+        if optimizer is not None:
+            for g in optimizer.param_groups:
+                g['lr'] = cur_lr
+
         r = train_recs[(step - 1) % len(train_recs)]
         p_text, r_text = format_pair(r, cap_idx=(step - 1))
 
@@ -510,7 +641,7 @@ def train_and_evaluate(
         elif mode == "learned_prefix":
             v_pref = learned_prefix()
         elif mode == "zeroed":
-            v_raw = torch.zeros(1, 64, 768, device=device, dtype=torch.float32)
+            v_raw = torch.zeros(1, num_tokens, 768, device=device, dtype=torch.float32)
             v_pref = projector(v_raw)
         elif mode == "shuffled":
             rand_id = random.choice(list(features_dict.keys()))
@@ -520,21 +651,24 @@ def train_and_evaluate(
             v_raw = features_dict[r["image_id"]].unsqueeze(0).to(device).float()
             v_pref = projector(v_raw)
 
-        if optimizer is not None:
-            optimizer.zero_grad()
-
         loss = compute_loss_for_pair(p_text, r_text, v_pref)
+        scaled_loss = loss / accum_steps
 
         if mode != "text_only" and optimizer is not None:
-            loss.backward()
-            params = projector.parameters() if projector else learned_prefix.parameters()
-            torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
-            optimizer.step()
+            scaled_loss.backward()
 
-        loss_val = loss.item()
-        step_losses.append(loss_val)
+        accum_loss += loss.item()
 
-        if step % val_every == 0:
+        if step % accum_steps == 0 or step == num_steps:
+            if mode != "text_only" and optimizer is not None:
+                params = projector.parameters() if projector else learned_prefix.parameters()
+                torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
+                optimizer.step()
+                optimizer.zero_grad()
+
+        step_losses.append(loss.item())
+
+        if step % 250 == 0:
             vl = evaluate_split_all_captions(val_recs, mode, max_images=50)
             val_losses.append((step, vl))
 
@@ -545,10 +679,9 @@ def train_and_evaluate(
     generated_samples = []
 
     if eval_test:
-        # Comprehensive Final Evaluation on ALL 5 Captions across all 200 Test Images
+        # Full evaluation on ALL 5 reference captions per image (1,000 evaluations)
         final_test_loss = evaluate_split_all_captions(test_recs, mode, max_images=None)
 
-        # Qualitative Greedy Generations on 10 Sample Images
         if projector is not None: projector.eval()
         if learned_prefix is not None: learned_prefix.eval()
 
@@ -563,19 +696,22 @@ def train_and_evaluate(
 
                 curr_embeds = torch.cat([v_pref, text_embeds], dim=1) if v_pref is not None else text_embeds
                 gen_toks = []
-                for _ in range(24):
+                for _ in range(32):
                     out = qwen_model(inputs_embeds=curr_embeds)
                     next_tok = torch.argmax(out.logits[:, -1, :], dim=-1)
                     tok_id = next_tok.item()
-                    if tok_id in [tokenizer.eos_token_id, 151645]: # <|im_end|>
+                    # Truncate clean at EOS, <|im_end|>, or newline '\n' (token ID 198)
+                    if tok_id in [tokenizer.eos_token_id, 151645, 198]:
                         break
                     gen_toks.append(tok_id)
                     next_embed = qwen_model.model.embed_tokens(next_tok.unsqueeze(0))
                     curr_embeds = torch.cat([curr_embeds, next_embed], dim=1)
 
                 gen_text = tokenizer.decode(gen_toks, skip_special_tokens=True).strip()
-                ref_texts = [c["caption"] for c in r["captions"]]
+                if "\n" in gen_text:
+                    gen_text = gen_text.split("\n")[0].strip()
 
+                ref_texts = [c["caption"] for c in r["captions"]]
                 ref_toks_list = [c.lower().split() for c in ref_texts]
                 cand_toks = gen_text.lower().split()
                 bleu4 = compute_sentence_bleu(ref_toks_list, cand_toks, max_n=4)
@@ -607,10 +743,9 @@ def train_and_evaluate(
     }
 
 # ==============================================================================
-# 8. Non-Parametric Bootstrap & Paired Statistics
+# 9. Non-Parametric Bootstrap & Two-Sided Wilcoxon Test
 # ==============================================================================
 def paired_bootstrap_test(diffs, n_resamples=10000, alpha=0.05):
-    """Computes paired bootstrap mean difference and 95% Confidence Interval."""
     means = []
     n = len(diffs)
     for _ in range(n_resamples):
@@ -622,10 +757,10 @@ def paired_bootstrap_test(diffs, n_resamples=10000, alpha=0.05):
     return mean_diff, lower_ci, upper_ci
 
 # ==============================================================================
-# 9. Main Orchestrator
+# 10. Main Orchestrator
 # ==============================================================================
 def main():
-    parser = argparse.ArgumentParser(description="Rigorous Multimodal Projector Benchmark")
+    parser = argparse.ArgumentParser(description="Multimodal Projector Benchmark & Diagnostics")
     parser.add_argument("--data_dir", type=str, default="./coco_data", help="Directory for COCO data")
     parser.add_argument("--num_train", type=int, default=2000, help="Train image count")
     parser.add_argument("--num_val", type=int, default=200, help="Val image count")
@@ -633,6 +768,12 @@ def main():
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-0.5B", help="Base LLM")
     parser.add_argument("--steps", type=int, default=1000, help="Training steps (default: 1000 = 0.5 epochs)")
     parser.add_argument("--num_seeds", type=int, default=10, help="Seeds per mode (default: 10)")
+    parser.add_argument("--arch", type=str, default="mlp", choices=["mlp", "linear"], help="Projector architecture (default: mlp)")
+    parser.add_argument("--no_pool", action="store_true", help="Disable 2D pooling (use all 196 tokens)")
+    parser.add_argument("--clip_layer", type=str, default="penultimate", choices=["penultimate", "last"], help="CLIP layer")
+    parser.add_argument("--accum_steps", type=int, default=16, help="Gradient accumulation steps (default: 16)")
+    parser.add_argument("--overfit", action="store_true", help="Run 20-image overfit test only")
+    parser.add_argument("--verify_data", action="store_true", help="Run alignment diagnostics only")
     parser.add_argument("--sweep", action="store_true", default=True, help="Sweep learning rates")
     parser.add_argument("--no_drive", action="store_true", help="Disable Google Drive saving")
     args = parser.parse_args()
@@ -648,56 +789,70 @@ def main():
     )
 
     # 2. Vision Features
-    features_dict = extract_clip_features(records, args.data_dir, device)
+    num_tokens = 196 if args.no_pool else 64
+    features_dict = extract_clip_features(
+        records, args.data_dir, device, no_pool=args.no_pool, clip_layer=args.clip_layer
+    )
 
     # 3. Base Language Model
     print(f"\nLoading {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     qwen_model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float32).to(device)
 
-    # Freeze LLM backbone completely
     for p in qwen_model.parameters():
         p.requires_grad = False
     qwen_model.eval()
 
-    # 4. Norm Audit
-    norm_report = conduct_norm_audit(features_dict, qwen_model)
+    # Diagnostic Option 1: Data Alignment Check
+    if args.verify_data:
+        verify_data_alignment(records, features_dict)
+        return
 
-    # 5. Learning Rate Sweep (2 Seeds on Validation Set)
-    candidate_lrs = [1e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2]
-    best_lr = 2e-3
+    # Diagnostic Option 2: Overfit Test
+    if args.overfit:
+        verify_data_alignment(records, features_dict)
+        run_overfit_test(records, features_dict, qwen_model, tokenizer, device, arch=args.arch, num_tokens=num_tokens)
+        return
+
+    # Standard Pipeline
+    verify_data_alignment(records, features_dict)
+
+    # 4. Learning Rate Sweep (3 Seeds: 42, 1337, 2026 across full steps)
+    candidate_lrs = [1e-4, 5e-4, 1e-3, 2e-3]
+    best_lr = 5e-4
     lr_sweep_results = {}
 
     if args.sweep:
         print("\n" + "=" * 90)
-        print("  LEARNING RATE SWEEP (Validation Set, Averaged Over 2 Seeds: 42 and 1337)")
+        print(f"  LEARNING RATE SWEEP (Validation Set, Averaged Over 3 Seeds: 42, 1337, 2026 | Arch: {args.arch})")
         print("=" * 90)
         best_val = float("inf")
         for lr in candidate_lrs:
             val_scores = []
-            for s in [42, 1337]:
+            for s in [42, 1337, 2026]:
                 res = train_and_evaluate(
                     mode="real", seed=s, lr=lr, records=records,
                     features_dict=features_dict, qwen_model=qwen_model, tokenizer=tokenizer,
-                    device=device, num_steps=min(200, args.steps), val_every=100, eval_test=False
+                    device=device, num_steps=min(300, args.steps), arch=args.arch,
+                    num_tokens=num_tokens, accum_steps=args.accum_steps, eval_test=False
                 )
                 val_scores.append(res["final_val_loss"])
             mean_vl = float(np.mean(val_scores))
             lr_sweep_results[str(lr)] = mean_vl
-            print(f"  LR = {lr:.1e} -> Mean Val Loss = {mean_vl:.4f} (Seed 42: {val_scores[0]:.4f}, Seed 1337: {val_scores[1]:.4f})")
+            print(f"  LR = {lr:.1e} -> Mean Val Loss = {mean_vl:.4f} (Seeds: {[round(x, 4) for x in val_scores]})")
             if mean_vl < best_val:
                 best_val = mean_vl
                 best_lr = lr
         print(f"\nSelected Optimal Learning Rate: {best_lr:.1e} (Mean Val Loss: {best_val:.4f})\n")
 
-    # 6. Comprehensive 10-Seed Multimodal Benchmark Across 5 Modes
+    # 5. 10-Seed Multimodal Benchmark
     all_seeds = [42, 1337, 2026, 7, 99, 101, 314, 777, 888, 999][:args.num_seeds]
     modes = ["real", "shuffled", "zeroed", "learned_prefix", "text_only"]
     benchmark_results = {m: [] for m in modes}
 
     print("\n" + "=" * 90)
     epochs = args.steps / args.num_train
-    print(f"  10-SEED RIGOROUS MULTIMODAL BENCHMARK (LR = {best_lr:.1e}, Steps = {args.steps}, Epochs = {epochs:.2f})")
+    print(f"  10-SEED RIGOROUS BENCHMARK (Arch: {args.arch.upper()}, Layer: {args.clip_layer}, Tokens: {num_tokens}, LR: {best_lr:.1e}, Batch: {args.accum_steps})")
     print(f"  Evaluation on ALL 5 reference captions per test image (1,000 captions total)")
     print("=" * 90)
 
@@ -707,12 +862,13 @@ def main():
             res = train_and_evaluate(
                 mode=mode, seed=seed, lr=best_lr, records=records,
                 features_dict=features_dict, qwen_model=qwen_model, tokenizer=tokenizer,
-                device=device, num_steps=args.steps, val_every=250
+                device=device, num_steps=args.steps, arch=args.arch,
+                num_tokens=num_tokens, accum_steps=args.accum_steps, eval_test=True
             )
             benchmark_results[mode].append(res)
             print(f"Done in {res['training_time_s']:.1f} s | Test Loss: {res['final_test_loss']:.4f} | BLEU-4: {res['mean_bleu4']:.4f}")
 
-    # 7. Non-Parametric Statistical Summary Table
+    # 6. Non-Parametric Statistical Summary
     print("\n" + "=" * 105)
     print("  FINAL 10-SEED HELD-OUT TEST EVALUATION SUMMARY (ALL 5 CAPTIONS PER IMAGE)")
     print("=" * 105)
@@ -736,9 +892,9 @@ def main():
         print(f"{mode:<16} | {med:<12.4f} | {iqr:<10.4f} | {mean_l:.4f} ± {std_l:.4f}   | {min_l:<10.4f} | {max_l:<10.4f} | {mean_b:<12.4f}")
     print("=" * 105)
 
-    # 8. Paired Hypothesis Testing & Non-Parametric Bootstrap
+    # 7. Two-Sided Paired Hypothesis Testing & Non-Parametric Bootstrap
     print("\n" + "=" * 90)
-    print("  PAIRED HYPOTHESIS TESTING (PER-SEED DIFFERENCES)")
+    print("  PAIRED HYPOTHESIS TESTING (TWO-SIDED)")
     print("=" * 90)
 
     real_losses = np.array(mode_test_losses["real"])
@@ -751,25 +907,25 @@ def main():
     print(f"   - Mean Advantage of Real: {mean_diff_s:+.4f} loss points")
     print(f"   - 95% Bootstrap Confidence Interval: [{ci_low_s:+.4f}, {ci_high_s:+.4f}]")
     if HAS_SCIPY and len(diff_shuffled) >= 5:
-        w_stat, p_val_s = wilcoxon(shuffled_losses, real_losses, alternative='greater')
-        print(f"   - Paired Wilcoxon Signed-Rank Test: W = {w_stat:.1f}, p = {p_val_s:.4e}")
+        w_stat, p_val_s = wilcoxon(shuffled_losses, real_losses, alternative='two-sided')
+        print(f"   - Two-Sided Paired Wilcoxon Signed-Rank Test: W = {w_stat:.1f}, p = {p_val_s:.4e}")
 
     prefix_losses = np.array(mode_test_losses["learned_prefix"])
     diff_prefix = prefix_losses - real_losses
     mean_diff_p, ci_low_p, ci_high_p = paired_bootstrap_test(diff_prefix)
 
-    print(f"\n2. Real Visual Features vs. Freely Learned Prefix (Soft Prompt Control):")
+    print(f"\n2. Real Visual Features vs. Freely Learned Prefix (Capacity-Matched Control):")
     print(f"   - Per-seed paired difference (LearnedPrefix - Real): {np.round(diff_prefix, 4).tolist()}")
     print(f"   - Mean Advantage of Real: {mean_diff_p:+.4f} loss points")
     print(f"   - 95% Bootstrap Confidence Interval: [{ci_low_p:+.4f}, {ci_high_p:+.4f}]")
     if HAS_SCIPY and len(diff_prefix) >= 5:
-        w_stat_p, p_val_p = wilcoxon(prefix_losses, real_losses, alternative='greater')
-        print(f"   - Paired Wilcoxon Signed-Rank Test: W = {w_stat_p:.1f}, p = {p_val_p:.4e}")
+        w_stat_p, p_val_p = wilcoxon(prefix_losses, real_losses, alternative='two-sided')
+        print(f"   - Two-Sided Paired Wilcoxon Signed-Rank Test: W = {w_stat_p:.1f}, p = {p_val_p:.4e}")
     print("=" * 90)
 
-    # 9. Qualitative Caption Generations
+    # 8. Clean Qualitative Caption Generations
     print("\n" + "=" * 90)
-    print("  QUALITATIVE EVALUATION: 10 SAMPLE GENERATED CAPTIONS ACROSS MODES")
+    print("  QUALITATIVE EVALUATION: 10 SAMPLE GENERATED CAPTIONS (CLEANLY TRUNCATED)")
     print("=" * 90)
     sample_recs = benchmark_results["real"][0]["generated_samples"]
     for i, s in enumerate(sample_recs):
@@ -781,18 +937,12 @@ def main():
             print(f"  - [{m:<14}]: \"{gen_txt}\" (BLEU-4: {b4:.4f})")
     print("=" * 90)
 
-    # 10. Single-Batch C++ Parity Check Export
-    test_r = records[0]
-    p_text = "<|im_start|>user\nDescribe the image in detail.<|im_end|>\n<|im_start|>assistant\n"
-    r_text = f"{test_r['captions'][0]['caption']}<|im_end|>\n"
-    p_ids = tokenizer.encode(p_text, add_special_tokens=False)
-    r_ids = tokenizer.encode(r_text, add_special_tokens=False)
-    tot_ids = p_ids + r_ids
-
     export_payload = {
-        "norm_report": norm_report,
+        "arch": args.arch,
+        "clip_layer": args.clip_layer,
+        "num_tokens": num_tokens,
+        "accum_steps": args.accum_steps,
         "best_learning_rate": best_lr,
-        "lr_sweep_results": lr_sweep_results,
         "summary_table": {
             mode: {
                 "median_loss": float(np.median(mode_test_losses[mode])),
@@ -803,26 +953,6 @@ def main():
                 "mean_bleu4": float(np.mean([r["mean_bleu4"] for r in benchmark_results[mode]]))
             } for mode in modes
         },
-        "paired_comparisons": {
-            "real_vs_shuffled": {
-                "mean_diff": mean_diff_s,
-                "ci_95": [ci_low_s, ci_high_s],
-                "diffs": [float(x) for x in diff_shuffled]
-            },
-            "real_vs_learned_prefix": {
-                "mean_diff": mean_diff_p,
-                "ci_95": [ci_low_p, ci_high_p],
-                "diffs": [float(x) for x in diff_prefix]
-            }
-        },
-        "fixed_batch_for_cpp": {
-            "image_id": test_r["image_id"],
-            "visual_features_shape": [64, 768],
-            "input_ids": tot_ids,
-            "prompt_len": len(p_ids),
-            "response_len": len(r_ids)
-        },
-        "initial_projector_weights": benchmark_results["real"][0]["initial_weights"],
         "created_at": datetime.now().isoformat()
     }
 

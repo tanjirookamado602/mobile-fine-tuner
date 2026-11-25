@@ -36,7 +36,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ============================================================================
 # Compiler options
 # ============================================================================
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fopenmp")
 if(OPERATORS_WARNINGS_AS_ERRORS)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 endif()

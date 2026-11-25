@@ -1,0 +1,41 @@
+[  2%] Building CXX object operators_build/CMakeFiles/operators.dir/finetune_ops/core/lm_loss.cpp.o
+[  5%] Linking CXX static library ../lib/liboperators.a
+[ 94%] Built target operators
+[ 97%] Building CXX object CMakeFiles/train_projector.dir/train_projector.cpp.o
+[100%] Linking CXX executable train_projector
+[100%] Built target train_projector
+[  2%] Building CXX object operators_build/CMakeFiles/operators.dir/finetune_ops/core/lm_loss.cpp.o
+[  5%] Linking CXX static library ../lib/liboperators.a
+[ 94%] Built target operators
+[ 97%] Building CXX object CMakeFiles/train_projector.dir/train_projector.cpp.o
+[100%] Linking CXX executable train_projector
+[100%] Built target train_projector
+========================================================================
+  MobileFineTuner: Multimodal Visual Projector Training Program        
+  Architecture: 2-Layer GELU MLP Projector (768 -> 896) + Frozen Qwen2.5-0.5B
+  Execution Mode: [real] | Steps: 2 | Accum: 1 | LR: 0.001 | Seed: 42 | Quantize Base: None (FP32)
+========================================================================
+[2026-11-25 17:17:29.282] Loaded 50 image features (64 tokens x 768 dim).
+[2026-11-25 17:17:29.284] Loaded 50 train pairs, 10 validation pairs.
+[2026-11-25 17:17:29.284] Direct load from Q8_0 checkpoint: models/qwen2.5-0.5b-q8_0.q8...
+[RSS Breakdown | Before Q8_0 Config Init] VmRSS=15.1 MB | VmHWM=19.7 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Empty Config Init] VmRSS=15.8 MB | VmHWM=19.7 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Raw Q8 File Read] VmRSS=898.0 MB | VmHWM=898.0 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[2026-11-25 17:17:30.570] Successfully loaded: 168 Q8_0 weights, 122 FP32 tensors.
+[2026-11-25 17:17:30.570] Base Model RAM upon Q8_0 load: 898.02 MB
+[RSS Breakdown | After Q8_0 Load & Trim] VmRSS=898.0 MB | VmHWM=1417.1 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=519.6 MB (Peak=519.6 MB)
+[2026-11-25 17:17:30.605] Initialized 2-Layer GELU MLP Projector (1551617 parameters).
+
+------------------------------------------------------------------------
+Starting Training Steps (mlp Projector, Mode=real)...
+------------------------------------------------------------------------
+[QLoRA-fused] FIRST CALL: prof=0 n=98 k=896 m=896
+[RSS Breakdown | Step 1 After Fwd+LMHead+Loss] VmRSS=1358.7 MB | VmHWM=1417.1 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=976.0 MB (Peak=976.0 MB)
+[RSS Breakdown | Step 1 After Backward] VmRSS=1475.7 MB | VmHWM=1475.7 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=532.6 MB (Peak=1086.4 MB)
+[RSS Breakdown | Step 1 After Cleanup & Pool Trim] VmRSS=925.1 MB | VmHWM=1486.9 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=531.9 MB (Peak=1086.4 MB)
+[2026-11-25 17:17:52.516] Step  1/2 | Loss = 4.9241 | RSS = 925.1 MB | Fwd = 8448.9 ms | Bwd = 13315.0 ms | Total = 21911.5 ms
+[2026-11-25 17:18:13.321] Step  2/2 | Loss = 5.0919 | RSS = 925.4 MB | Fwd = 10204.9 ms | Bwd = 10527.2 ms | Total = 20804.2 ms
+
+========================================================================
+SUCCESS: Multimodal Projector Training Completed Successfully.
+========================================================================

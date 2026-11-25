@@ -215,40 +215,74 @@ public:
         float* grad_weight_data = grad_weight ? grad_weight->data<float>() : nullptr;
 
         std::vector<float> logits(static_cast<size_t>(V));
+        const bool w_is_f32 = (lm_head_weight_->dtype() == kFloat32);
+        const float* w_f32 = w_is_f32 ? lm_head_weight_->data<float>() : nullptr;
+
         for (const auto& item : valid_) {
             const float* hrow = hidden_data + (item.b * S + item.s) * H;
 
             float max_val = -std::numeric_limits<float>::infinity();
+#pragma omp parallel for reduction(max:max_val) schedule(static) if(V >= 1024)
             for (int64_t v = 0; v < V; ++v) {
-                const float z = dot_hidden_weight(hrow, lm_head_weight_, v, H);
+                float z = 0.0f;
+                if (w_is_f32) {
+                    const float* wrow = w_f32 + v * H;
+                    for (int64_t h = 0; h < H; ++h) z += hrow[h] * wrow[h];
+                } else {
+                    z = dot_hidden_weight(hrow, lm_head_weight_, v, H);
+                }
                 logits[static_cast<size_t>(v)] = z;
-                max_val = std::max(max_val, z);
+                if (z > max_val) max_val = z;
             }
 
-            float denom = 0.0f;
+            double denom = 0.0;
+#pragma omp parallel for reduction(+:denom) schedule(static) if(V >= 1024)
             for (int64_t v = 0; v < V; ++v) {
-                denom += std::exp(logits[static_cast<size_t>(v)] - max_val);
+                denom += std::exp(static_cast<double>(logits[static_cast<size_t>(v)] - max_val));
             }
-            const float inv_denom = 1.0f / denom;
+            const float inv_denom = static_cast<float>(1.0 / denom);
 
             float* ghrow = grad_hidden_data ? grad_hidden_data + (item.b * S + item.s) * H : nullptr;
-            for (int64_t v = 0; v < V; ++v) {
-                float p = std::exp(logits[static_cast<size_t>(v)] - max_val) * inv_denom;
-                if (v == item.cls) {
-                    p -= 1.0f;
-                }
-                const float g = p * coeff;
-
-                if (ghrow) {
-                    const int64_t wbase = v * H;
-                    for (int64_t h = 0; h < H; ++h) {
-                        ghrow[h] += g * tensor_row_value(lm_head_weight_, wbase + h);
+            if (ghrow && w_is_f32 && !grad_weight_data) {
+#pragma omp parallel if(V >= 1024)
+                {
+                    std::vector<float> local_gh(static_cast<size_t>(H), 0.0f);
+#pragma omp for schedule(static) nowait
+                    for (int64_t v = 0; v < V; ++v) {
+                        float p = std::exp(logits[static_cast<size_t>(v)] - max_val) * inv_denom;
+                        if (v == item.cls) p -= 1.0f;
+                        const float g = p * coeff;
+                        const float* wrow = w_f32 + v * H;
+                        for (int64_t h = 0; h < H; ++h) {
+                            local_gh[static_cast<size_t>(h)] += g * wrow[h];
+                        }
+                    }
+#pragma omp critical
+                    {
+                        for (int64_t h = 0; h < H; ++h) {
+                            ghrow[h] += local_gh[static_cast<size_t>(h)];
+                        }
                     }
                 }
-                if (grad_weight_data) {
-                    float* gwrow = grad_weight_data + v * H;
-                    for (int64_t h = 0; h < H; ++h) {
-                        gwrow[h] += g * hrow[h];
+            } else {
+                for (int64_t v = 0; v < V; ++v) {
+                    float p = std::exp(logits[static_cast<size_t>(v)] - max_val) * inv_denom;
+                    if (v == item.cls) {
+                        p -= 1.0f;
+                    }
+                    const float g = p * coeff;
+
+                    if (ghrow) {
+                        const int64_t wbase = v * H;
+                        for (int64_t h = 0; h < H; ++h) {
+                            ghrow[h] += g * tensor_row_value(lm_head_weight_, wbase + h);
+                        }
+                    }
+                    if (grad_weight_data) {
+                        float* gwrow = grad_weight_data + v * H;
+                        for (int64_t h = 0; h < H; ++h) {
+                            gwrow[h] += g * hrow[h];
+                        }
                     }
                 }
             }
@@ -419,24 +453,33 @@ TensorPtr selected_token_lm_cross_entropy(const TensorPtr& hidden,
     auto valid = collect_valid_shifted_labels(labels, B, S, V, ignore_index);
     double loss_sum = 0.0;
     const float* hidden_data = hidden->data<float>();
+    const bool w_is_f32 = (lm_head_weight->dtype() == kFloat32);
+    const float* w_f32 = w_is_f32 ? lm_head_weight->data<float>() : nullptr;
+    std::vector<float> logits_buf(static_cast<size_t>(V));
 
     for (const auto& item : valid) {
         const float* hrow = hidden_data + (item.b * S + item.s) * H;
 
         float max_val = -std::numeric_limits<float>::infinity();
         float target_logit = 0.0f;
+#pragma omp parallel for reduction(max:max_val) schedule(static) if(V >= 1024)
         for (int64_t v = 0; v < V; ++v) {
-            const float z = dot_hidden_weight(hrow, lm_head_weight, v, H);
-            if (v == item.cls) {
-                target_logit = z;
+            float z = 0.0f;
+            if (w_is_f32) {
+                const float* wrow = w_f32 + v * H;
+                for (int64_t h = 0; h < H; ++h) z += hrow[h] * wrow[h];
+            } else {
+                z = dot_hidden_weight(hrow, lm_head_weight, v, H);
             }
-            max_val = std::max(max_val, z);
+            logits_buf[static_cast<size_t>(v)] = z;
+            if (z > max_val) max_val = z;
         }
+        target_logit = logits_buf[static_cast<size_t>(item.cls)];
 
         double denom = 0.0;
+#pragma omp parallel for reduction(+:denom) schedule(static) if(V >= 1024)
         for (int64_t v = 0; v < V; ++v) {
-            const float z = dot_hidden_weight(hrow, lm_head_weight, v, H);
-            denom += std::exp(z - max_val);
+            denom += std::exp(static_cast<double>(logits_buf[static_cast<size_t>(v)] - max_val));
         }
         const double log_sum_exp = max_val + std::log(denom);
         loss_sum += (log_sum_exp - target_logit);

@@ -53,12 +53,16 @@ struct QwenBlock {
     std::unique_ptr<LoRALinear> v_lin;
     std::unique_ptr<LoRALinear> o_lin;
 
+    std::unique_ptr<LoRALinear> gate_lin;
+    std::unique_ptr<LoRALinear> up_lin;
+    std::unique_ptr<LoRALinear> down_lin;
+
     bool lora_initialized = false;
 };
 
 class QwenModel {
 public:
-    explicit QwenModel(const QwenConfig& cfg);
+    explicit QwenModel(const QwenConfig& cfg, bool allocate_weights = true);
     ~QwenModel() = default;
 
     TensorPtr forward_hidden(const TensorPtr& input_ids, const TensorPtr& attention_mask = nullptr);
@@ -80,6 +84,14 @@ public:
     std::vector<TensorPtr> parameters() const;
     void freeze_base();
 
+    void quantize_base_weights_q8_0();
+    bool is_base_quantized() const { return base_quantized_; }
+    void init_linear_wrappers();
+
+    QwenBlock& get_block(size_t i) { return layers_.at(i); }
+    const QwenBlock& get_block(size_t i) const { return layers_.at(i); }
+    const TensorPtr& final_norm_weight() const { return final_norm_weight_; }
+
     void set_memory_efficient_attention(bool enabled) { memory_efficient_attention_ = enabled; }
     void set_activation_checkpointing(bool enabled);
     void enable_parameter_sharding(const sharding::ShardConfig& config);
@@ -94,6 +106,7 @@ private:
     TensorPtr final_norm_weight_; // [hidden]
 
     std::vector<QwenBlock> layers_;
+    bool base_quantized_ = false;
     bool memory_efficient_attention_ = false;
     bool activation_checkpointing_ = false;
     std::unique_ptr<FrozenModelOffload> offload_;

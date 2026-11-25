@@ -7,6 +7,7 @@
 #include "../core/ops.h"
 #include "../core/utils.h"
 #include "../core/memory_efficient_attention.h"
+#include "../core/memory_manager.h"
 #include "../core/checkpoint.h"
 #include <cmath>
 #include <cstring>
@@ -15,6 +16,15 @@
 #include <random>
 #include <sstream>
 #include <vector>
+#if defined(__ANDROID__)
+#include <malloc.h>
+#define QWEN_TRIM_MEMORY() mallopt(M_PURGE, 0)
+#elif defined(__GLIBC__)
+#include <malloc.h>
+#define QWEN_TRIM_MEMORY() malloc_trim(0)
+#else
+#define QWEN_TRIM_MEMORY() ((void)0)
+#endif
 
 namespace ops {
 
@@ -80,10 +90,13 @@ QwenConfig QwenConfig::from_pretrained(const std::string& path) {
 }
 
 // -------------- Construction --------------
-QwenModel::QwenModel(const QwenConfig& cfg) : config_(cfg) {
+QwenModel::QwenModel(const QwenConfig& cfg, bool allocate_weights) : config_(cfg) {
+    layers_.resize(cfg.num_hidden_layers);
+    if (!allocate_weights) {
+        return;
+    }
     embed_tokens_ = std::make_shared<Tensor>(std::vector<int64_t>{cfg.vocab_size, cfg.hidden_size}, kFloat32, kCPU);
     final_norm_weight_ = std::make_shared<Tensor>(std::vector<int64_t>{cfg.hidden_size}, kFloat32, kCPU);
-    layers_.resize(cfg.num_hidden_layers);
     for (int i = 0; i < cfg.num_hidden_layers; ++i) {
         auto& b = layers_[i];
         b.input_norm_weight = std::make_shared<Tensor>(std::vector<int64_t>{cfg.hidden_size}, kFloat32, kCPU);
@@ -212,21 +225,21 @@ std::vector<TensorPtr> QwenModel::parameters() const {
     if (offload_) throw std::logic_error("use get_lora_parameters after enabling frozen base offload");
     std::vector<TensorPtr> params;
     params.reserve(2 + static_cast<size_t>(config_.num_hidden_layers) * 12);
-    params.push_back(embed_tokens_);
-    params.push_back(final_norm_weight_);
+    if (embed_tokens_) params.push_back(embed_tokens_);
+    if (final_norm_weight_) params.push_back(final_norm_weight_);
     for (const auto& b : layers_) {
-        params.push_back(b.input_norm_weight);
-        params.push_back(b.post_norm_weight);
-        params.push_back(b.q_proj_weight);
-        params.push_back(b.q_proj_bias);
-        params.push_back(b.k_proj_weight);
-        params.push_back(b.k_proj_bias);
-        params.push_back(b.v_proj_weight);
-        params.push_back(b.v_proj_bias);
-        params.push_back(b.o_proj_weight);
-        params.push_back(b.gate_proj_weight);
-        params.push_back(b.up_proj_weight);
-        params.push_back(b.down_proj_weight);
+        if (b.input_norm_weight) params.push_back(b.input_norm_weight);
+        if (b.post_norm_weight) params.push_back(b.post_norm_weight);
+        if (b.q_proj_weight) params.push_back(b.q_proj_weight);
+        if (b.q_proj_bias) params.push_back(b.q_proj_bias);
+        if (b.k_proj_weight) params.push_back(b.k_proj_weight);
+        if (b.k_proj_bias) params.push_back(b.k_proj_bias);
+        if (b.v_proj_weight) params.push_back(b.v_proj_weight);
+        if (b.v_proj_bias) params.push_back(b.v_proj_bias);
+        if (b.o_proj_weight) params.push_back(b.o_proj_weight);
+        if (b.gate_proj_weight) params.push_back(b.gate_proj_weight);
+        if (b.up_proj_weight) params.push_back(b.up_proj_weight);
+        if (b.down_proj_weight) params.push_back(b.down_proj_weight);
     }
     return params;
 }
@@ -291,9 +304,9 @@ TensorPtr QwenModel::attention(const TensorPtr& x, QwenBlock& blk,
     int64_t Hd = C / H;
     // int64_t kv_out = HKV * Hd;
 
-    auto q = blk.lora_initialized && blk.q_lin ? blk.q_lin->forward(x) : add(matmul(x, blk.q_proj_weight), blk.q_proj_bias);
-    auto k = blk.lora_initialized && blk.k_lin ? blk.k_lin->forward(x) : add(matmul(x, blk.k_proj_weight), blk.k_proj_bias);
-    auto v = blk.lora_initialized && blk.v_lin ? blk.v_lin->forward(x) : add(matmul(x, blk.v_proj_weight), blk.v_proj_bias);
+    auto q = blk.q_lin ? blk.q_lin->forward(x) : add(matmul(x, blk.q_proj_weight), blk.q_proj_bias);
+    auto k = blk.k_lin ? blk.k_lin->forward(x) : add(matmul(x, blk.k_proj_weight), blk.k_proj_bias);
+    auto v = blk.v_lin ? blk.v_lin->forward(x) : add(matmul(x, blk.v_proj_weight), blk.v_proj_bias);
 
     q = reshape(q, {B, S, H, Hd});
     q = permute(q, {0, 2, 1, 3});  // [B,H,S,Hd]
@@ -332,16 +345,76 @@ TensorPtr QwenModel::attention(const TensorPtr& x, QwenBlock& blk,
     ctx = permute(ctx, {0, 2, 1, 3});
     ctx = reshape(ctx, {B, S, C});
 
-    auto out = blk.lora_initialized && blk.o_lin ? blk.o_lin->forward(ctx) : matmul(ctx, blk.o_proj_weight);
+    auto out = blk.o_lin ? blk.o_lin->forward(ctx) : matmul(ctx, blk.o_proj_weight);
     return out;
 }
 
 TensorPtr QwenModel::mlp(const TensorPtr& x, QwenBlock& blk) {
-    auto gate = matmul(x, blk.gate_proj_weight);
-    auto up = matmul(x, blk.up_proj_weight);
+    auto gate = blk.gate_lin ? blk.gate_lin->forward(x) : matmul(x, blk.gate_proj_weight);
+    auto up = blk.up_lin ? blk.up_lin->forward(x) : matmul(x, blk.up_proj_weight);
     auto act = swiglu(gate, up);
-    auto down = matmul(act, blk.down_proj_weight);
+    auto down = blk.down_lin ? blk.down_lin->forward(act) : matmul(act, blk.down_proj_weight);
     return down;
+}
+
+void QwenModel::init_linear_wrappers() {
+    for (auto& b : layers_) {
+        if (!b.q_lin) b.q_lin = std::make_unique<LoRALinear>(b.q_proj_weight, b.q_proj_bias);
+        if (!b.k_lin) b.k_lin = std::make_unique<LoRALinear>(b.k_proj_weight, b.k_proj_bias);
+        if (!b.v_lin) b.v_lin = std::make_unique<LoRALinear>(b.v_proj_weight, b.v_proj_bias);
+        if (!b.o_lin) b.o_lin = std::make_unique<LoRALinear>(b.o_proj_weight, nullptr);
+        if (!b.gate_lin) b.gate_lin = std::make_unique<LoRALinear>(b.gate_proj_weight, nullptr);
+        if (!b.up_lin) b.up_lin = std::make_unique<LoRALinear>(b.up_proj_weight, nullptr);
+        if (!b.down_lin) b.down_lin = std::make_unique<LoRALinear>(b.down_proj_weight, nullptr);
+    }
+}
+
+void QwenModel::quantize_base_weights_q8_0() {
+    std::cout << "[QwenModel] Quantizing all 24 layers of base linear weights to Q8_0 (8.5 bits/weight)...\n";
+    init_linear_wrappers();
+    int quantized = 0;
+    for (auto& b : layers_) {
+
+        if (b.q_lin && b.q_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.q_lin->set_base_weights(nullptr, b.q_proj_bias);
+            b.q_proj_weight.reset();
+            quantized++;
+        }
+        if (b.k_lin && b.k_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.k_lin->set_base_weights(nullptr, b.k_proj_bias);
+            b.k_proj_weight.reset();
+            quantized++;
+        }
+        if (b.v_lin && b.v_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.v_lin->set_base_weights(nullptr, b.v_proj_bias);
+            b.v_proj_weight.reset();
+            quantized++;
+        }
+        if (b.o_lin && b.o_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.o_lin->set_base_weights(nullptr, nullptr);
+            b.o_proj_weight.reset();
+            quantized++;
+        }
+        if (b.gate_lin && b.gate_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.gate_lin->set_base_weights(nullptr, nullptr);
+            b.gate_proj_weight.reset();
+            quantized++;
+        }
+        if (b.up_lin && b.up_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.up_lin->set_base_weights(nullptr, nullptr);
+            b.up_proj_weight.reset();
+            quantized++;
+        }
+        if (b.down_lin && b.down_lin->quantize_base_weight_q8_0(/*allow_skip=*/true)) {
+            b.down_lin->set_base_weights(nullptr, nullptr);
+            b.down_proj_weight.reset();
+            quantized++;
+        }
+    }
+    MemoryManager::instance().clear_unused_memory();
+    QWEN_TRIM_MEMORY();
+    base_quantized_ = true;
+    std::cout << "[QwenModel] Quantized " << quantized << " linear projections to Q8_0 and released FP32 base memory.\n";
 }
 
 // -------------- 前向 --------------

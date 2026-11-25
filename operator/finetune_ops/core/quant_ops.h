@@ -7,6 +7,9 @@
 #include <stdexcept>
 #include <vector>
 #include <math.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>   // must be at file scope, never inside namespace ops
 #endif
@@ -126,6 +129,7 @@ inline void quantize_activations_q8_0(const float* a, block_q8_0* dst,
         throw std::runtime_error("quantize_activations_q8_0: K must be a multiple of 32");
     }
     const int64_t kb = k / Q8_0_BLOCK_SIZE;
+#pragma omp parallel for schedule(static) if(rows > 1)
     for (int64_t i = 0; i < rows; ++i) {
         quantize_row_q8_0_ref(a + i * k, dst + i * kb, static_cast<int>(k));
     }
@@ -261,12 +265,11 @@ inline void matmul_q8_0_q8_0_tiled(const block_q8_0* aq, const block_q8_0* wq,
     const int64_t kb = k / Q8_0_BLOCK_SIZE;
     if (kb <= 0) return;
 
-    // Scratch reused across the whole call; each output element needs kb entries.
-    // Heap-allocated once instead of per element.
-    std::vector<int32_t> ibuf(static_cast<size_t>(kb));
-    std::vector<float>   dbuf(static_cast<size_t>(kb));
-
+#pragma omp parallel for schedule(static) if(n > 1)
     for (int64_t i = 0; i < n; ++i) {
+        std::vector<int32_t> ibuf(static_cast<size_t>(kb));
+        std::vector<float>   dbuf(static_cast<size_t>(kb));
+
         const block_q8_0* arow = aq + static_cast<size_t>(i) * kb;
         float* crow = c + i * m;
 
@@ -331,6 +334,7 @@ inline void matmul_q8_0_rhs_T_scalar(const float* g, const block_q8_0* wq,
                                      float* c, int64_t n, int64_t m, int64_t k) {
     const int64_t kb = k / Q8_0_BLOCK_SIZE;
 
+#pragma omp parallel for schedule(static) if(n > 1)
     for (int64_t i = 0; i < n; ++i) {
         const float* grow = g + i * m;
         float* crow = c + i * k;
@@ -371,6 +375,7 @@ inline void q8_rhs_T_avx2(const float* g, const block_q8_0* wq,
                           float* c, int64_t n, int64_t m, int64_t k) {
     const int64_t kb = k / Q8_0_BLOCK_SIZE;
 
+#pragma omp parallel for schedule(static) if(n > 1)
     for (int64_t i = 0; i < n; ++i) {
         const float* grow = g + i * m;
         float* crow = c + i * k;

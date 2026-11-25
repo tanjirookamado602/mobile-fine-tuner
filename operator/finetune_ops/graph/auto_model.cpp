@@ -125,7 +125,7 @@ AutoModelForCausalLM::from_pretrained(const std::string& model_dir,
         }
         case ModelFamily::Qwen: {
             QwenConfig cfg = QwenConfig::from_pretrained(model_dir + "/config.json");
-            model->qwen_ = std::make_unique<QwenModel>(cfg);
+            model->qwen_ = std::make_unique<QwenModel>(cfg, options.load_weights);
             break;
         }
         default:

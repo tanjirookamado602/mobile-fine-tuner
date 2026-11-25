@@ -1,5 +1,9 @@
 #include "finetune_ops/core/tensor.h"
 #include "finetune_ops/core/ops.h"
+#include "finetune_ops/core/autograd_engine.h"
+#include "finetune_ops/core/lm_loss.h"
+#include "finetune_ops/core/memory_manager.h"
+#include "finetune_ops/core/quant_io.h"
 #include "finetune_ops/graph/auto_model.h"
 
 #include <iostream>
@@ -12,9 +16,18 @@
 #include <chrono>
 #include <iomanip>
 #include <cmath>
+#include <regex>
 #include <cstring>
-#include <malloc.h>
 #include <unistd.h>
+#if defined(__ANDROID__)
+#include <malloc.h>
+#define APP_TRIM_MEMORY() mallopt(M_PURGE, 0)
+#elif defined(__GLIBC__)
+#include <malloc.h>
+#define APP_TRIM_MEMORY() malloc_trim(0)
+#else
+#define APP_TRIM_MEMORY() ((void)0)
+#endif
 
 using namespace ops;
 
@@ -36,6 +49,81 @@ double get_rss_mb() {
     statm >> total_pages >> resident_pages;
     long page_size = sysconf(_SC_PAGESIZE);
     return (resident_pages * page_size) / (1024.0 * 1024.0);
+}
+
+double get_vmhwm_mb() {
+    std::ifstream st("/proc/self/status");
+    std::string line;
+    while (std::getline(st, line)) {
+        if (line.rfind("VmHWM:", 0) == 0) {
+            std::istringstream iss(line.substr(6));
+            double kb = 0.0;
+            iss >> kb;
+            return kb / 1024.0;
+        }
+    }
+    return 0.0;
+}
+
+void print_rss_breakdown(const std::string& stage, QwenModel* qwen) {
+    double rss = get_rss_mb();
+    double hwm = get_vmhwm_mb();
+    double pool_use_mb = MemoryManager::instance().get_memory_usage() / (1024.0 * 1024.0);
+    double pool_peak_mb = MemoryManager::instance().get_peak_memory() / (1024.0 * 1024.0);
+
+    double smaps_rss = 0.0, smaps_pss = 0.0, smaps_swap = 0.0;
+    {
+        std::ifstream sr("/proc/self/smaps_rollup");
+        std::string line;
+        while (std::getline(sr, line)) {
+            auto parse_kb = [&](const char* key, double& out) {
+                if (line.rfind(key, 0) == 0) {
+                    std::istringstream iss(line.substr(std::strlen(key)));
+                    double kb = 0.0;
+                    iss >> kb;
+                    out = kb / 1024.0;
+                }
+            };
+            parse_kb("Rss:", smaps_rss);
+            parse_kb("Pss:", smaps_pss);
+            parse_kb("Swap:", smaps_swap);
+        }
+    }
+
+    double q8_mb = 0.0;
+    double fp32_base_mb = 0.0;
+    if (qwen) {
+        if (qwen->embedding_weight()) {
+            fp32_base_mb += qwen->embedding_weight()->numel() * 4.0 / (1024.0 * 1024.0);
+        }
+        if (qwen->final_norm_weight()) {
+            fp32_base_mb += qwen->final_norm_weight()->numel() * 4.0 / (1024.0 * 1024.0);
+        }
+        for (int li = 0; li < qwen->config().num_hidden_layers; ++li) {
+            const auto& b = qwen->get_block(li);
+            auto add_f32 = [&](const TensorPtr& t) { if (t) fp32_base_mb += t->numel() * 4.0 / (1024.0 * 1024.0); };
+            add_f32(b.input_norm_weight); add_f32(b.post_norm_weight);
+            add_f32(b.q_proj_weight); add_f32(b.q_proj_bias);
+            add_f32(b.k_proj_weight); add_f32(b.k_proj_bias);
+            add_f32(b.v_proj_weight); add_f32(b.v_proj_bias);
+            add_f32(b.o_proj_weight);
+            add_f32(b.gate_proj_weight); add_f32(b.up_proj_weight); add_f32(b.down_proj_weight);
+            auto add_q8 = [&](const std::unique_ptr<LoRALinear>& lin) {
+                if (lin && lin->is_quantized()) {
+                    q8_mb += lin->quantized_weight().size() * sizeof(block_q8_0) / (1024.0 * 1024.0);
+                }
+            };
+            add_q8(b.q_lin); add_q8(b.k_lin); add_q8(b.v_lin); add_q8(b.o_lin);
+            add_q8(b.gate_lin); add_q8(b.up_lin); add_q8(b.down_lin);
+        }
+    }
+
+    std::cout << "[RSS Breakdown | " << stage << "] "
+              << std::fixed << std::setprecision(1)
+              << "VmRSS=" << rss << " MB | VmHWM=" << hwm << " MB | "
+              << "Swap=" << smaps_swap << " MB | "
+              << "Q8_Weights=" << q8_mb << " MB | FP32_Model=" << fp32_base_mb << " MB | "
+              << "MemPool_Use=" << pool_use_mb << " MB (Peak=" << pool_peak_mb << " MB)\n";
 }
 
 // Simple JSON parser for jsonl lines
@@ -171,7 +259,7 @@ public:
     int in_dim_;
     int out_dim_;
     int num_tokens_;
-    float scale_;
+    TensorPtr scale_;
 
     // LayerNorm on input
     TensorPtr ln_w_;
@@ -194,7 +282,9 @@ public:
 
         std::mt19937 gen(seed);
         float target_norm = 0.4633f;
-        scale_ = target_norm / std::sqrt(static_cast<float>(out_dim_));
+        float init_scale = target_norm / std::sqrt(static_cast<float>(out_dim_));
+        scale_ = full({1}, init_scale, kFloat32, kCPU);
+        scale_->set_requires_grad(true);
 
         // LayerNorm: init weights=1, bias=0
         ln_w_ = ones({in_dim}, kFloat32, kCPU);
@@ -231,7 +321,7 @@ public:
 
         // Positional Embedding: [1, num_tokens, out_dim]
         pos_embed_ = zeros({1, static_cast<int64_t>(num_tokens_), static_cast<int64_t>(out_dim_)}, kFloat32, kCPU);
-        std::normal_distribution<float> pdist(0.0f, scale_);
+        std::normal_distribution<float> pdist(0.0f, init_scale);
         float* pos_ptr = static_cast<float*>(pos_embed_->data_ptr());
         for (size_t i = 0; i < pos_embed_->numel(); ++i) {
             pos_ptr[i] = pdist(gen);
@@ -265,14 +355,14 @@ public:
 
     std::vector<TensorPtr> parameters() {
         if (arch_ == "mlp") {
-            return {ln_w_, ln_b_, W1_, b1_, W2_, b2_, pos_embed_};
+            return {ln_w_, ln_b_, W1_, b1_, W2_, b2_, scale_, pos_embed_};
         } else {
-            return {ln_w_, ln_b_, W1_, b1_, pos_embed_};
+            return {ln_w_, ln_b_, W1_, b1_, scale_, pos_embed_};
         }
     }
 
     size_t num_parameters() const {
-        size_t total = ln_w_->numel() + ln_b_->numel() + W1_->numel() + b1_->numel() + pos_embed_->numel();
+        size_t total = ln_w_->numel() + ln_b_->numel() + W1_->numel() + b1_->numel() + scale_->numel() + pos_embed_->numel();
         if (arch_ == "mlp") {
             total += W2_->numel() + b2_->numel();
         }
@@ -375,6 +465,10 @@ int main(int argc, char** argv) {
     int accum_steps = 1;
     float lr = 1e-3f;
     unsigned seed = 42;
+    bool quantize_base = false;
+    bool full_logits = false;
+    std::string save_quantized_path;
+    std::string load_quantized_path;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -385,6 +479,14 @@ int main(int argc, char** argv) {
         else if (arg == "--accum_steps" && i + 1 < argc) accum_steps = std::stoi(argv[++i]);
         else if (arg == "--lr" && i + 1 < argc) lr = std::stof(argv[++i]);
         else if (arg == "--seed" && i + 1 < argc) seed = std::stoul(argv[++i]);
+        else if (arg == "--quantize_base") quantize_base = true;
+        else if (arg == "--full_logits") full_logits = true;
+        else if (arg == "--save_quantized" && i + 1 < argc) save_quantized_path = argv[++i];
+        else if (arg == "--load_quantized" && i + 1 < argc) load_quantized_path = argv[++i];
+        else if (arg == "--model_dir" && i + 1 < argc) model_dir = argv[++i];
+        else if (arg == "--train_path" && i + 1 < argc) train_path = argv[++i];
+        else if (arg == "--val_path" && i + 1 < argc) val_path = argv[++i];
+        else if (arg == "--features_path" && i + 1 < argc) features_path = argv[++i];
     }
 
     std::cout << "========================================================================\n";
@@ -392,7 +494,8 @@ int main(int argc, char** argv) {
     std::cout << "  Architecture: " << (arch == "mlp" ? "2-Layer GELU MLP" : "Linear") 
               << " Projector (768 -> 896) + Frozen Qwen2.5-0.5B\n";
     std::cout << "  Execution Mode: [" << mode << "] | Steps: " << num_steps 
-              << " | Accum: " << accum_steps << " | LR: " << lr << " | Seed: " << seed << "\n";
+              << " | Accum: " << accum_steps << " | LR: " << lr << " | Seed: " << seed 
+              << " | Quantize Base: " << (quantize_base ? "Q8_0" : "None (FP32)") << "\n";
     std::cout << "========================================================================\n";
 
     // 1. Load Visual Features
@@ -418,16 +521,167 @@ int main(int argc, char** argv) {
               << val_data.size() << " validation pairs.\n";
 
     // 3. Load Qwen Model and Freeze Backbone
-    std::cout << "[" << get_wall_time_iso() << "] Loading and freezing Qwen2.5-0.5B backbone...\n";
-    AutoModelLoadOptions opts;
-    opts.load_weights = true;
-    auto model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
-    if (!model) {
-        std::cerr << "Failed to load model\n";
-        return 1;
+    std::shared_ptr<AutoModelForCausalLM> model;
+    QwenModel* qwen = nullptr;
+
+    if (!load_quantized_path.empty()) {
+        std::cout << "[" << get_wall_time_iso() << "] Direct load from Q8_0 checkpoint: " 
+                  << load_quantized_path << "...\n";
+        print_rss_breakdown("Before Q8_0 Config Init", nullptr);
+        AutoModelLoadOptions opts;
+        opts.load_weights = false; // Never touch FP32 safetensors or pre-allocate FP32 base weights!
+        model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
+        if (!model) {
+            std::cerr << "Failed to initialize model config from " << model_dir << "\n";
+            return 1;
+        }
+        qwen = model->qwen();
+        qwen->init_linear_wrappers();
+        print_rss_breakdown("After Empty Config Init", qwen);
+
+        std::vector<ops::QuantTensor> tensors;
+        std::string qerr;
+        if (!ops::read_quant_model(load_quantized_path, tensors, &qerr)) {
+            std::cerr << "Error reading quantized model " << load_quantized_path << ": " << qerr << "\n";
+            return 1;
+        }
+        print_rss_breakdown("After Raw Q8 File Read", qwen);
+        std::regex q8_name(R"(layers\.(\d+)\.(.+))");
+        int adopted_q8 = 0, loaded_f32 = 0;
+        for (auto& t : tensors) {
+            if (t.is_q8) {
+                std::smatch m;
+                if (!std::regex_match(t.name, m, q8_name)) {
+                    std::cerr << "Warning: unexpected q8 tensor name " << t.name << "\n";
+                    continue;
+                }
+                int li = std::stoi(m[1].str());
+                std::string sub = m[2].str();
+                if (li < 0 || li >= qwen->config().num_hidden_layers) continue;
+                auto& blk = qwen->get_block(li);
+                LoRALinear* lin = nullptr;
+                if (sub == "self_attn.q_proj.weight") lin = blk.q_lin.get();
+                else if (sub == "self_attn.k_proj.weight") lin = blk.k_lin.get();
+                else if (sub == "self_attn.v_proj.weight") lin = blk.v_lin.get();
+                else if (sub == "self_attn.o_proj.weight") lin = blk.o_lin.get();
+                else if (sub == "mlp.gate_proj.weight") lin = blk.gate_lin.get();
+                else if (sub == "mlp.up_proj.weight") lin = blk.up_lin.get();
+                else if (sub == "mlp.down_proj.weight") lin = blk.down_lin.get();
+                if (lin) {
+                    lin->adopt_quantized_weight(t.k, t.m, std::move(t.q8));
+                    adopted_q8++;
+                }
+                t.q8.clear();
+                t.q8.shrink_to_fit();
+            } else {
+                auto ten = std::make_shared<Tensor>(
+                    t.shape, static_cast<const void*>(t.f32.data()), DType::kFloat32, kCPU);
+                qwen->assign_weight(t.name, ten);
+                t.f32.clear();
+                t.f32.shrink_to_fit();
+                loaded_f32++;
+            }
+        }
+        tensors.clear();
+        tensors.shrink_to_fit();
+        for (int li = 0; li < qwen->config().num_hidden_layers; ++li) {
+            auto& blk = qwen->get_block(li);
+            if (blk.q_lin) blk.q_lin->set_base_weights(nullptr, blk.q_proj_bias);
+            if (blk.k_lin) blk.k_lin->set_base_weights(nullptr, blk.k_proj_bias);
+            if (blk.v_lin) blk.v_lin->set_base_weights(nullptr, blk.v_proj_bias);
+            if (blk.o_lin) blk.o_lin->set_base_weights(nullptr, nullptr);
+            if (blk.gate_lin) blk.gate_lin->set_base_weights(nullptr, nullptr);
+            if (blk.up_lin) blk.up_lin->set_base_weights(nullptr, nullptr);
+            if (blk.down_lin) blk.down_lin->set_base_weights(nullptr, nullptr);
+            blk.q_proj_weight.reset();
+            blk.k_proj_weight.reset();
+            blk.v_proj_weight.reset();
+            blk.o_proj_weight.reset();
+            blk.gate_proj_weight.reset();
+            blk.up_proj_weight.reset();
+            blk.down_proj_weight.reset();
+        }
+        MemoryManager::instance().clear_unused_memory();
+        APP_TRIM_MEMORY();
+        qwen->freeze_base();
+        std::cout << "[" << get_wall_time_iso() << "] Successfully loaded: " << adopted_q8 
+                  << " Q8_0 weights, " << loaded_f32 << " FP32 tensors.\n";
+        std::cout << "[" << get_wall_time_iso() << "] Base Model RAM upon Q8_0 load: " 
+                  << std::fixed << std::setprecision(2) << get_rss_mb() << " MB\n";
+        print_rss_breakdown("After Q8_0 Load & Trim", qwen);
+    } else {
+        std::cout << "[" << get_wall_time_iso() << "] Loading and freezing Qwen2.5-0.5B backbone...\n";
+        AutoModelLoadOptions opts;
+        opts.load_weights = true;
+        model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
+        if (!model) {
+            std::cerr << "Failed to load model\n";
+            return 1;
+        }
+        qwen = model->qwen();
+        qwen->freeze_base(); // CRITICAL: Freezes all 290 backbone parameters
+
+        if (quantize_base || !save_quantized_path.empty()) {
+            std::cout << "[" << get_wall_time_iso() << "] RSS before base quantization: " 
+                      << std::fixed << std::setprecision(2) << get_rss_mb() << " MB\n";
+            qwen->quantize_base_weights_q8_0();
+            std::cout << "[" << get_wall_time_iso() << "] RSS after base quantization: " 
+                      << std::fixed << std::setprecision(2) << get_rss_mb() << " MB\n";
+        }
+
+        if (!save_quantized_path.empty()) {
+            std::cout << "[" << get_wall_time_iso() << "] Exporting self-contained Q8_0 checkpoint to " 
+                      << save_quantized_path << "...\n";
+            std::vector<ops::QuantTensor> out;
+            auto push_f32 = [&](const std::string& name, const TensorPtr& tt) {
+                if (!tt) return;
+                ops::QuantTensor e;
+                e.name = name;
+                e.shape = tt->shape();
+                const float* p = tt->data<float>();
+                e.f32.assign(p, p + tt->numel());
+                out.push_back(std::move(e));
+            };
+            auto push_q8 = [&](const std::string& name, const LoRALinear* lin) {
+                if (!lin || !lin->is_quantized()) return;
+                ops::QuantTensor e;
+                e.name = name;
+                e.is_q8 = true;
+                e.k = lin->quantized_k();
+                e.m = lin->quantized_m();
+                e.q8 = lin->quantized_weight();
+                out.push_back(std::move(e));
+            };
+            for (int li = 0; li < qwen->config().num_hidden_layers; ++li) {
+                auto& b = qwen->get_block(li);
+                const std::string p = "layers." + std::to_string(li) + ".";
+                push_q8(p + "self_attn.q_proj.weight", b.q_lin.get());
+                push_q8(p + "self_attn.k_proj.weight", b.k_lin.get());
+                push_q8(p + "self_attn.v_proj.weight", b.v_lin.get());
+                push_q8(p + "self_attn.o_proj.weight", b.o_lin.get());
+                push_q8(p + "mlp.gate_proj.weight", b.gate_lin.get());
+                push_q8(p + "mlp.up_proj.weight", b.up_lin.get());
+                push_q8(p + "mlp.down_proj.weight", b.down_lin.get());
+
+                push_f32(p + "self_attn.q_proj.bias", b.q_proj_bias);
+                push_f32(p + "self_attn.k_proj.bias", b.k_proj_bias);
+                push_f32(p + "self_attn.v_proj.bias", b.v_proj_bias);
+                push_f32(p + "input_norm.weight", b.input_norm_weight);
+                push_f32(p + "post_norm.weight", b.post_norm_weight);
+            }
+            push_f32("embed_tokens.weight", qwen->embedding_weight());
+            push_f32("final_norm.weight", qwen->final_norm_weight());
+
+            std::string werr;
+            if (!ops::write_quant_model(save_quantized_path, out, &werr)) {
+                std::cerr << "Error writing quantized model: " << werr << "\n";
+                return 1;
+            }
+            std::cout << "[" << get_wall_time_iso() << "] Successfully exported Q8_0 checkpoint: " 
+                      << save_quantized_path << " (" << out.size() << " tensors)\n";
+            return 0; // Export complete
+        }
     }
-    auto qwen = model->qwen();
-    qwen->freeze_base(); // CRITICAL: Freezes all 290 backbone parameters
 
     // 4. Instantiate Trainable Projector / Module and Optimizer
     std::unique_ptr<MultimodalProjector> projector;
@@ -457,6 +711,7 @@ int main(int argc, char** argv) {
     // Helper to evaluate validation loss
     auto evaluate_val = [&](int step) {
         if (val_data.empty()) return;
+        ops::autograd::Engine::instance().set_enabled(false);
         float total_val_loss = 0.0f;
         int val_count = 0;
         for (size_t vi = 0; vi < std::min<size_t>(5, val_data.size()); ++vi) {
@@ -483,37 +738,52 @@ int main(int argc, char** argv) {
             }
 
             auto h = qwen->forward_hidden_from_embeds(spliced);
-            auto logits = qwen->lm_head(h);
-
             int64_t total_seq = spliced->shape()[1];
-            int64_t pred_seq = total_seq - 1;
-            auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
-
-            auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
-            int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
             int64_t prefix_len = (mode == "text_only") ? 0 : num_tokens;
-            for (int64_t i = 0; i < pred_seq; ++i) {
-                if (i < prefix_len - 1) {
-                    tgt_ptr[i] = -100;
-                } else {
-                    int64_t tidx = i - prefix_len + 1;
-                    tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
+            TensorPtr loss;
+            if (full_logits) {
+                auto logits = qwen->lm_head(h);
+                int64_t pred_seq = total_seq - 1;
+                auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
+                auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
+                int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
+                for (int64_t i = 0; i < pred_seq; ++i) {
+                    if (i < prefix_len - 1) tgt_ptr[i] = -100;
+                    else {
+                        int64_t tidx = i - prefix_len + 1;
+                        tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
+                    }
                 }
+                loss = cross_entropy_loss(flat_l, targets, "mean");
+            } else {
+                auto full_labels = zeros({1, total_seq}, DType::kInt32, kCPU);
+                int32_t* lbl_ptr = static_cast<int32_t*>(full_labels->data_ptr());
+                std::fill_n(lbl_ptr, total_seq, -100);
+                for (size_t tidx = 0; tidx < sample.labels.size(); ++tidx) {
+                    int64_t pos = prefix_len + static_cast<int64_t>(tidx);
+                    if (pos < total_seq) lbl_ptr[pos] = sample.labels[tidx];
+                }
+                loss = selected_token_lm_cross_entropy(h, qwen->embedding_weight(), full_labels, -100, "mean");
             }
-            auto loss = cross_entropy_loss(flat_l, targets, "mean");
             total_val_loss += static_cast<const float*>(loss->data_ptr())[0];
             val_count++;
         }
+        ops::autograd::Engine::instance().set_enabled(true);
+        ops::autograd::Engine::instance().clear_graph();
+        MemoryManager::instance().clear_unused_memory();
+        APP_TRIM_MEMORY();
         float avg_val_loss = total_val_loss / (val_count > 0 ? val_count : 1);
-        std::cout << "  >>> [Step " << step << " Validation] Mean Loss = " << std::fixed << std::setprecision(4) << avg_val_loss << "\n";
+        std::cout << "  >>> [Step " << step << " Validation] Mean Loss = " << std::fixed << std::setprecision(4) << avg_val_loss << std::endl;
     };
 
     // 5. Training Loop
     std::cout << "\n------------------------------------------------------------------------\n";
-    std::cout << "Starting Training Steps (" << arch << " Projector, Mode=" << mode << ")...\n";
+    std::cout << "Starting Training Steps (" << arch << " Projector, Mode=" << mode << ")..." << std::endl;
     std::cout << "------------------------------------------------------------------------\n";
 
-    evaluate_val(0); // Initial zero-shot validation loss
+    if (val_every > 0) {
+        evaluate_val(0); // Initial zero-shot validation loss
+    }
 
     std::mt19937 rng(seed);
     zero_all_grad();
@@ -554,31 +824,41 @@ int main(int argc, char** argv) {
             spliced = concat(std::vector<TensorPtr>{proj_tokens, text_embeds}, 1);
         }
 
-        // Forward pass through frozen Qwen
+        // Forward pass through frozen Qwen + selected-token or full LM loss
         auto t_fwd0 = std::chrono::high_resolution_clock::now();
         auto h = qwen->forward_hidden_from_embeds(spliced);
-        auto logits = qwen->lm_head(h);
+        int64_t total_seq = spliced->shape()[1];
+        TensorPtr logits, flat_l, targets, full_labels, loss;
+        if (full_logits) {
+            logits = qwen->lm_head(h);
+            int64_t pred_seq = total_seq - 1;
+            flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
+            targets = zeros({pred_seq}, DType::kInt32, kCPU);
+            int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
+            for (int64_t i = 0; i < pred_seq; ++i) {
+                if (i < prefix_len - 1) {
+                    tgt_ptr[i] = -100;
+                } else {
+                    int64_t tidx = i - prefix_len + 1;
+                    tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
+                }
+            }
+            loss = cross_entropy_loss(flat_l, targets, "mean");
+        } else {
+            full_labels = zeros({1, total_seq}, DType::kInt32, kCPU);
+            int32_t* lbl_ptr = static_cast<int32_t*>(full_labels->data_ptr());
+            std::fill_n(lbl_ptr, total_seq, -100);
+            for (size_t tidx = 0; tidx < sample.labels.size(); ++tidx) {
+                int64_t pos = prefix_len + static_cast<int64_t>(tidx);
+                if (pos < total_seq) lbl_ptr[pos] = sample.labels[tidx];
+            }
+            loss = selected_token_lm_cross_entropy(h, qwen->embedding_weight(), full_labels, -100, "mean");
+        }
         auto t_fwd1 = std::chrono::high_resolution_clock::now();
         double fwd_ms = std::chrono::duration<double, std::milli>(t_fwd1 - t_fwd0).count();
 
-        int64_t total_seq = spliced->shape()[1];
-        int64_t pred_seq = total_seq - 1;
-        auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
-
-        // Target labels (prefix masked with -100)
-        auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
-        int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
-        for (int64_t i = 0; i < pred_seq; ++i) {
-            if (i < prefix_len - 1) {
-                tgt_ptr[i] = -100;
-            } else {
-                int64_t tidx = i - prefix_len + 1;
-                tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(sample.labels.size())) ? sample.labels[tidx] : -100;
-            }
-        }
-
-        auto loss = cross_entropy_loss(flat_l, targets, "mean");
         float loss_val = static_cast<const float*>(loss->data_ptr())[0];
+        if (step == 1) print_rss_breakdown("Step 1 After Fwd+LMHead+Loss", qwen);
 
         // Backward pass (with gradient accumulation scaling)
         auto t_bwd0 = std::chrono::high_resolution_clock::now();
@@ -590,12 +870,18 @@ int main(int argc, char** argv) {
         }
         auto t_bwd1 = std::chrono::high_resolution_clock::now();
         double bwd_ms = std::chrono::duration<double, std::milli>(t_bwd1 - t_bwd0).count();
+        if (step == 1) print_rss_breakdown("Step 1 After Backward", qwen);
 
         // Optimizer step every accum_steps or last step
         if (step % accum_steps == 0 || step == num_steps) {
             optimizer.step(trainable_params, lr);
             zero_all_grad();
         }
+        ops::autograd::Engine::instance().clear_graph();
+        loss.reset(); flat_l.reset(); logits.reset(); h.reset(); spliced.reset(); targets.reset(); full_labels.reset();
+        MemoryManager::instance().clear_unused_memory();
+        APP_TRIM_MEMORY();
+        if (step == 1) print_rss_breakdown("Step 1 After Cleanup & Pool Trim", qwen);
 
         auto t_step1 = std::chrono::high_resolution_clock::now();
         double total_ms = std::chrono::duration<double, std::milli>(t_step1 - t_step0).count();
@@ -606,13 +892,11 @@ int main(int argc, char** argv) {
                   << " | RSS = " << std::fixed << std::setprecision(1) << rss_mb << " MB"
                   << " | Fwd = " << std::setw(6) << std::setprecision(1) << fwd_ms << " ms"
                   << " | Bwd = " << std::setw(6) << bwd_ms << " ms"
-                  << " | Total = " << std::setw(6) << total_ms << " ms\n";
+                  << " | Total = " << std::setw(6) << total_ms << " ms" << std::endl;
 
-        if (step % val_every == 0) {
+        if (val_every > 0 && step % val_every == 0) {
             evaluate_val(step);
         }
-
-        malloc_trim(0);
     }
 
     std::cout << "\n========================================================================\n";

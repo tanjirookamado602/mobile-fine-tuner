@@ -1,0 +1,44 @@
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077204
+    grad ln_b      : norm=0.085112
+    grad W1        : norm=3.570920
+    grad b1        : norm=0.141749
+    grad W2        : norm=3.793071
+    grad b2        : norm=0.404542
+    grad scale     : norm=4.673744
+    grad pos_embed : norm=11.910149
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713264
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302919
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300714
+    after step1 b2        : norm=0.562923
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710188
+    scale value after step1 = 0.014478
+  C++ Step 1: Loss = 5.120154
+  C++ Step 2: Loss = 4.557185
+  C++ Step 3: Loss = 4.565556
+  C++ Step 4: Loss = 3.966750
+  C++ Step 5: Loss = 3.718312
+
+=== 5-STEP LOSS PARITY COMPARISON ===
+Step 1: PT(erf)=5.120436 | PT(tanh)=5.120417 | C++=5.120150 | rel_err(erf)=0.0056% | rel_err(tanh)=0.0052%
+Step 2: PT(erf)=4.557662 | PT(tanh)=4.557518 | C++=4.557180 | rel_err(erf)=0.0106% | rel_err(tanh)=0.0074%
+Step 3: PT(erf)=4.565256 | PT(tanh)=4.564844 | C++=4.565560 | rel_err(erf)=0.0067% | rel_err(tanh)=0.0157%
+Step 4: PT(erf)=3.967787 | PT(tanh)=3.967812 | C++=3.966750 | rel_err(erf)=0.0261% | rel_err(tanh)=0.0268%
+Step 5: PT(erf)=3.719689 | PT(tanh)=3.718522 | C++=3.718310 | rel_err(erf)=0.0371% | rel_err(tanh)=0.0057%
+
+=== STEP 1 GRADIENT & WEIGHT DIFF (C++ vs PT exact) ===
+  ln_w      : grad_cos=1.000000, grad_rel_err=5.558e-04 | post_step1_w_rel_err=6.566e-05
+  ln_b      : grad_cos=1.000000, grad_rel_err=5.216e-04 | post_step1_w_rel_err=1.678e-05
+  W1        : grad_cos=1.000000, grad_rel_err=5.361e-04 | post_step1_w_rel_err=1.538e-03
+  b1        : grad_cos=1.000000, grad_rel_err=5.373e-04 | post_step1_w_rel_err=3.183e-03
+  W2        : grad_cos=1.000000, grad_rel_err=5.314e-04 | post_step1_w_rel_err=1.329e-03
+  b2        : grad_cos=1.000000, grad_rel_err=5.581e-04 | post_step1_w_rel_err=3.401e-03
+  scale     : grad_cos=1.000000, grad_rel_err=5.238e-04 | post_step1_w_rel_err=0.000e+00
+  pos_embed : grad_cos=1.000000, grad_rel_err=6.365e-04 | post_step1_w_rel_err=2.140e-03

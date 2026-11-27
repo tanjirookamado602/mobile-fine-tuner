@@ -1,0 +1,48 @@
+========================================================================
+  MobileFineTuner: Multimodal Visual Projector Training Program        
+  Architecture: 2-Layer GELU MLP Projector (768 -> 896) + Frozen Qwen2.5-0.5B
+  Execution Mode: [real] | Steps: 40 | Accum: 1 | LR: 0.001 | Seed: 42 | Quantize Base: None (FP32)
+========================================================================
+[2026-11-27 15:27:08.371] Loaded 50 image features (64 tokens x 768 dim).
+[2026-11-27 15:27:08.384] Loaded 50 train pairs, 10 validation pairs.
+[2026-11-27 15:27:08.384] Direct load from Q8_0 checkpoint: /data/local/tmp/mft_projector/models/qwen2.5-0.5b-q8_0.q8...
+[RSS Breakdown | Before Q8_0 Config Init] VmRSS=13.4 MB | VmHWM=18.0 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Empty Config Init] VmRSS=13.4 MB | VmHWM=18.0 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Raw Q8 File Read] VmRSS=896.3 MB | VmHWM=896.3 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[2026-11-27 15:27:11.219] Successfully loaded: 168 Q8_0 weights, 122 FP32 tensors.
+[2026-11-27 15:27:11.219] Base Model RAM upon Q8_0 load: 896.51 MB
+[RSS Breakdown | After Q8_0 Load & Trim] VmRSS=896.5 MB | VmHWM=1415.7 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=519.6 MB (Peak=519.6 MB)
+[2026-11-27 15:27:11.264] Initialized 2-Layer GELU MLP Projector (1551617 parameters).
+
+------------------------------------------------------------------------
+Starting Training Steps (mlp Projector, Mode=real)...
+[QLoRA-fused] FIRST CALL: prof=0 n=98 k=896 m=896
+------------------------------------------------------------------------
+  >>> [Step 0 Validation] Mean Loss = 5.3430
+[RSS Breakdown | Step 1 After Fwd+LMHead+Loss] VmRSS=1359.2 MB | VmHWM=1415.7 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=976.0 MB (Peak=976.0 MB)
+[RSS Breakdown | Step 1 After Backward] VmRSS=1477.8 MB | VmHWM=1478.0 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=532.6 MB (Peak=1086.4 MB)
+[RSS Breakdown | Step 1 After Cleanup & Pool Trim] VmRSS=922.7 MB | VmHWM=1489.5 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=531.9 MB (Peak=1086.4 MB)
+[2026-11-27 15:28:08.809] Step  1/40 | Loss = 4.9903 | RSS = 922.7 MB | Fwd = 6857.7 ms | Bwd = 17110.2 ms | Total = 24393.0 ms
+[2026-11-27 15:28:37.005] Step  2/40 | Loss = 6.6668 | RSS = 922.9 MB | Fwd = 6559.8 ms | Bwd = 21435.7 ms | Total = 28196.5 ms
+[2026-11-27 15:29:17.404] Step  3/40 | Loss = 6.4563 | RSS = 922.9 MB | Fwd = 8431.7 ms | Bwd = 31774.5 ms | Total = 40396.4 ms
+[2026-11-27 15:29:45.759] Step  4/40 | Loss = 4.8681 | RSS = 922.9 MB | Fwd = 8402.4 ms | Bwd = 19755.8 ms | Total = 28353.8 ms
+[2026-11-27 15:30:16.966] Step  5/40 | Loss = 4.6044 | RSS = 922.9 MB | Fwd = 7293.8 ms | Bwd = 23719.2 ms | Total = 31206.8 ms
+[2026-11-27 15:30:45.748] Step  6/40 | Loss = 6.3147 | RSS = 922.9 MB | Fwd = 7738.8 ms | Bwd = 20853.6 ms | Total = 28782.4 ms
+[2026-11-27 15:31:17.246] Step  7/40 | Loss = 4.0533 | RSS = 923.0 MB | Fwd = 8089.1 ms | Bwd = 23211.9 ms | Total = 31497.5 ms
+[2026-11-27 15:31:50.142] Step  8/40 | Loss = 3.7759 | RSS = 923.0 MB | Fwd = 9118.4 ms | Bwd = 23574.6 ms | Total = 32895.6 ms
+[2026-11-27 15:32:20.278] Step  9/40 | Loss = 4.4122 | RSS = 922.9 MB | Fwd = 8437.0 ms | Bwd = 21503.4 ms | Total = 30135.8 ms
+[2026-11-27 15:32:53.325] Step 10/40 | Loss = 4.2337 | RSS = 922.9 MB | Fwd = 8404.6 ms | Bwd = 24418.8 ms | Total = 33046.6 ms
+[2026-11-27 15:33:25.565] Step 11/40 | Loss = 3.4446 | RSS = 923.0 MB | Fwd = 9193.6 ms | Bwd = 22828.2 ms | Total = 32238.4 ms
+[2026-11-27 15:33:56.061] Step 12/40 | Loss = 5.7517 | RSS = 922.9 MB | Fwd = 9738.7 ms | Bwd = 20544.7 ms | Total = 30496.0 ms
+[2026-11-27 15:34:24.995] Step 13/40 | Loss = 4.1913 | RSS = 923.0 MB | Fwd = 8135.0 ms | Bwd = 20592.1 ms | Total = 28934.4 ms
+[2026-11-27 15:34:58.777] Step 14/40 | Loss = 3.4374 | RSS = 923.0 MB | Fwd = 8954.0 ms | Bwd = 24624.3 ms | Total = 33781.9 ms
+[2026-11-27 15:35:34.071] Step 15/40 | Loss = 3.3494 | RSS = 923.0 MB | Fwd = 9933.8 ms | Bwd = 25151.3 ms | Total = 35293.5 ms
+[2026-11-27 15:36:10.550] Step 16/40 | Loss = 3.2687 | RSS = 915.8 MB | Fwd = 10834.3 ms | Bwd = 25416.7 ms | Total = 36478.7 ms
+[2026-11-27 15:36:44.249] Step 17/40 | Loss = 3.8580 | RSS = 916.0 MB | Fwd = 9955.9 ms | Bwd = 23527.1 ms | Total = 33698.1 ms
+[2026-11-27 15:37:20.884] Step 18/40 | Loss = 3.7759 | RSS = 916.2 MB | Fwd = 10878.9 ms | Bwd = 25546.6 ms | Total = 36634.8 ms
+[2026-11-27 15:38:04.073] Step 19/40 | Loss = 3.6960 | RSS = 916.4 MB | Fwd = 9868.7 ms | Bwd = 33082.2 ms | Total = 43188.6 ms
+[2026-11-27 15:38:42.144] Step 20/40 | Loss = 5.5421 | RSS = 916.5 MB | Fwd = 13334.9 ms | Bwd = 24460.2 ms | Total = 38068.9 ms
+  >>> [Step 20 Validation] Mean Loss = 4.1092
+[2026-11-27 15:40:19.875] Step 21/40 | Loss = 3.8984 | RSS = 914.2 MB | Fwd = 18999.9 ms | Bwd = 27738.0 ms | Total = 47110.8 ms
+[2026-11-27 15:40:57.164] Step 22/40 | Loss = 3.0691 | RSS = 914.6 MB | Fwd = 10286.3 ms | Bwd = 26741.2 ms | Total = 37287.4 ms
+[2026-11-27 15:41:31.200] Step 23/40 | Loss = 3.5395 | RSS = 914.8 MB | Fwd = 9929.4 ms | Bwd = 23869.3 ms | Total = 34035.1 ms

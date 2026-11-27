@@ -80,11 +80,38 @@ Implemented fixes:
 
 ---
 
-## 3. Phone Telemetry Status & Pending Unplugged Run
+## 3. Verified On-Device Hardware, RSS & 15-Minute Unplugged Soak (Tecno Camon 18P)
 
-- **Prior 5-Step Phone Run (`2026-11-24`, Raw Log: [phone_5step_usb_plugged_initial.log](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/phone_5step_usb_plugged_initial.log)):**
-  - **Plumbing check only:** 5 training steps (`4.99 -> 6.47 -> 6.44 -> 4.90 -> 4.67`), 5-image validation drop (`5.34 -> 4.88`), average step time $44.6\text{ s}$ (no BLAS).
-  - **USB-Plugged Caveat:** Phone was connected to USB during telemetry polling, so battery current (`-382.6 mA` / `1,502.5 mW`) measured **net battery drain minus USB charging**, NOT total phone power.
-  - **Throttling Caveat:** CPU frequencies were NOT logged in that run, so no claim of "zero throttling" is made.
-  - **SoC Identity Verification Pending:** Device `ro.product.model` is `TECNO CH7n` (Tecno Camon 18P), which was previously labeled `Helio G88 (MT6781)` in older scripts and `Helio G96 (MT6781)` in newer notes. Raw `/proc/cpuinfo` (`CPU part` hex IDs) + `getprop` will be captured directly from the phone when re-attached.
-- **Unplugged Test Script Prepared:** [scripts/android/run_unplugged_soak.sh](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/scripts/android/run_unplugged_soak.sh) + updated Android binary (`build-android/train_projector`) are ready to push and run unplugged for 15 minutes once the phone is connected.
+### 3.1 SoC & CPU Part-ID Verification (From Raw `/proc/cpuinfo` & `getprop`)
+Raw logs: [cpuinfo_raw.txt](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/unplugged_soak_20261127/cpuinfo_raw.txt), [getprop_raw.txt](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/unplugged_soak_20261127/getprop_raw.txt)
+- **Model / Device:** `TECNO CH7n` (`TECNO-CH7n`, **Tecno Camon 18P**), Android `12` (`arm64-v8a`)
+- **Platform / SoC:** `ro.board.platform = mt6781`, `ro.soc.model = MT6781V/CD` (**MediaTek Helio G96**)
+- **CPU Cores:** `processor 0–5` = `CPU part: 0xd05` (**6× Cortex-A55**, up to `2000 MHz`); `processor 6–7` = `CPU part: 0xd0b` (**2× Cortex-A76**, up to `2050 MHz`). Features include `asimddp`, `fphp`, `asimdhp`. *(Supersedes the erroneous `Helio G88` label in earlier scripts.)*
+
+### 3.2 On-Device Post-Fix 1-Step RSS Breakdown (`2026-11-27`)
+Raw log: [phone_post_fix_1step_rss_breakdown.log](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/phone_post_fix_1step_rss_breakdown.log)
+- Device `MemTotal`: `7,995,456 kB` (`7.63 GiB`) | `MemAvailable` before run: `2,293,304 kB` (`2,239.6 MB`)
+- Base Model upon Q8_0 load: **`896.55 MB`** (`362.6 MB` Q8_0 + `519.6 MB` FP32 `embed_tokens` + runtime)
+- After Fwd + Selected-Token Loss: `1,359.4 MB` (`MemPool_Use = 976.0 MB`)
+- After Backward: `1,477.9 MB` (`VmHWM = 1,489.6 MB`, `Swap = 0.0 MB`)
+- Post-step cleanup & trim: **`922.8 MB`** (`Fwd = 7.38 s`, `Bwd = 19.45 s`, `Total = 27.12 s`)
+
+### 3.3 15-Minute Unplugged Battery, Thermal & Frequency Soak (`2026-11-27`)
+Raw logs: [unplugged_telemetry.csv](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/unplugged_soak_20261127/unplugged_telemetry.csv), [train_unplugged.log](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/unplugged_soak_20261127/train_unplugged.log), [soak_status.txt](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/unplugged_soak_20261127/soak_status.txt)
+
+| Metric | 60 s Unplugged Idle Baseline (`n=12`) | 15 min Unplugged Training (`n=165`, 23 Steps) | Notes |
+|:---|:---:|:---:|:---|
+| **Charging Status** | **100% `Discharging`** (12/12) | **100% `Discharging`** (165/165) | Total 178/178 samples strictly unplugged |
+| **Battery %** | `67% -> 67%` | **`67% -> 56%`** (`-11%`) | 900 s active training |
+| **Whole-Phone Power** | **`1,853.7 ± 391.8 mW`** (`1.85 W`) | **`5,173.0 ± 720.1 mW`** (`5.17 W`) | Peak `7,405.6 mW`; **Incremental compute = `+3.32 W`** |
+| **Battery Current / Volt** | `-473.2 mA` @ `3.917 V` | `-1,382.7 mA` @ `3.742 V` mean | Voltage sag `3.917 V -> 3.721 V` |
+| **Battery Temperature** | `31.6 -> 31.8 °C` | **`31.5 -> 42.8 °C`** (`+11.3 °C`) | Crossed `~42 °C` near end of soak |
+| **CPU0 (A55) Clock** | `825 MHz` mean (`500–1,075`) | `1,993 MHz` mean (`975–2,000`) | Little cluster held near max `2.0 GHz` |
+| **CPU6 (A76) Clock** | `774 MHz` | **`1,761 MHz` mean** (max `2,050`, end `1,530`) | **Thermal throttling observed** (~25% A76 drop) |
+| **Memory (`VmRSS` / `VmHWM`)** | &mdash; | **`922.7 -> 914.8 MB` resting**; **`1,531.0 MB` `VmHWM` peak** | Zero memory leak across 23 steps; `Swap = 0.0 MB` |
+
+**Honest Takeaways:**
+1. The earlier USB-plugged `1.50 W` reading was an underestimate due to USB charging offset; true unplugged whole-phone power during Q8_0 training is **`5.17 W`** (`+3.32 W` above idle).
+2. **Thermal throttling IS real under 15-minute sustained 8-core load:** As battery temp reached `42.8 °C`, the big Cortex-A76 cores throttled from `2,050 MHz` to `1,530 MHz`, and step time rose from `~28–31 s` (Steps 1–10) to `~36–47 s` (Steps 16–23).
+3. Memory remained completely bounded (`1,531.0 MB` peak `VmHWM`, `914.8 MB` resting RSS across 23 steps) with zero OOM or swap pressure.
+

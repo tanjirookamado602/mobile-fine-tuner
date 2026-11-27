@@ -1,0 +1,125 @@
+=== DEVICE HARDWARE & KERNEL INFO ===
+Fri Nov 27 15:24:17 PKT 2026
+--- getprop ---
+ro.product.model = TECNO CH7n
+ro.product.device = TECNO-CH7n
+ro.product.manufacturer = TECNO MOBILE LIMITED
+ro.board.platform = mt6781
+ro.hardware = mt6781
+ro.mediatek.platform = 
+ro.soc.model = MT6781V/CD
+ro.build.version.release = 12
+--- /proc/cpuinfo ---
+processor	: 0
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 1
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 2
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 3
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 4
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 5
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd05
+CPU revision	: 0
+
+processor	: 6
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x3
+CPU part	: 0xd0b
+CPU revision	: 0
+
+processor	: 7
+BogoMIPS	: 26.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x3
+CPU part	: 0xd0b
+CPU revision	: 0
+
+Hardware	: MT6781V/CD
+Hardware	: MT6781V/CD
+--- /proc/meminfo (before run) ---
+MemTotal:        7995456 kB
+MemFree:         1296332 kB
+MemAvailable:    2330536 kB
+Buffers:            1556 kB
+Cached:          1436312 kB
+SwapCached:        28992 kB
+Active:          1736472 kB
+Inactive:        2264176 kB
+Active(anon):    1292148 kB
+Inactive(anon):  1662104 kB
+Active(file):     444324 kB
+Inactive(file):   602072 kB
+Unevictable:      267952 kB
+Mlocked:          267952 kB
+SwapTotal:       4379824 kB
+SwapFree:        1864788 kB
+Dirty:              2736 kB
+Writeback:             0 kB
+AnonPages:       2810812 kB
+Mapped:          1078508 kB
+Shmem:            127896 kB
+KReclaimable:     164488 kB
+Slab:             472064 kB
+SReclaimable:     154468 kB
+SUnreclaim:       317596 kB
+KernelStack:      104388 kB
+PageTables:       166976 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     8377552 kB
+Committed_AS:   133352600 kB
+VmallocTotal:   263061440 kB
+VmallocUsed:      208012 kB
+VmallocChunk:          0 kB
+Percpu:            10784 kB
+CmaTotal:         540672 kB
+CmaFree:             464 kB

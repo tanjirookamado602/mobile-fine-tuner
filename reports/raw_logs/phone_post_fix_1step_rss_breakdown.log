@@ -1,0 +1,38 @@
+/data/local/tmp/mft_projector/unplugged_logs/cpuinfo_raw.txt: 1 file pulled, 0 skipped. 0.3 MB/s (1940 bytes in 0.007s)
+/data/local/tmp/mft_projector/unplugged_logs/getprop_raw.txt: 1 file pulled, 0 skipped. 13.5 MB/s (58797 bytes in 0.004s)
+MemTotal:        7995456 kB
+MemFree:          192196 kB
+MemAvailable:    2293304 kB
+Buffers:            1480 kB
+Cached:          2261560 kB
+SwapCached:        29108 kB
+Active:          2485208 kB
+Inactive:        2403544 kB
+========================================================================
+  MobileFineTuner: Multimodal Visual Projector Training Program        
+  Architecture: 2-Layer GELU MLP Projector (768 -> 896) + Frozen Qwen2.5-0.5B
+  Execution Mode: [real] | Steps: 1 | Accum: 1 | LR: 0.001 | Seed: 42 | Quantize Base: None (FP32)
+========================================================================
+[2026-11-27 15:21:42.318] Loaded 50 image features (64 tokens x 768 dim).
+[2026-11-27 15:21:42.329] Loaded 50 train pairs, 10 validation pairs.
+[2026-11-27 15:21:42.329] Direct load from Q8_0 checkpoint: models/qwen2.5-0.5b-q8_0.q8...
+[RSS Breakdown | Before Q8_0 Config Init] VmRSS=13.7 MB | VmHWM=18.2 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Empty Config Init] VmRSS=13.7 MB | VmHWM=18.2 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[RSS Breakdown | After Raw Q8 File Read] VmRSS=896.4 MB | VmHWM=896.6 MB | Swap=0.0 MB | Q8_Weights=0.0 MB | FP32_Model=0.0 MB | MemPool_Use=0.0 MB (Peak=0.0 MB)
+[2026-11-27 15:21:45.980] Successfully loaded: 168 Q8_0 weights, 122 FP32 tensors.
+[2026-11-27 15:21:45.980] Base Model RAM upon Q8_0 load: 896.55 MB
+[RSS Breakdown | After Q8_0 Load & Trim] VmRSS=896.5 MB | VmHWM=1415.8 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=519.6 MB (Peak=519.6 MB)
+[2026-11-27 15:21:46.026] Initialized 2-Layer GELU MLP Projector (1551617 parameters).
+
+------------------------------------------------------------------------
+Starting Training Steps (mlp Projector, Mode=real)...
+[QLoRA-fused] FIRST CALL: prof=0 n=98 k=896 m=896
+------------------------------------------------------------------------
+[RSS Breakdown | Step 1 After Fwd+LMHead+Loss] VmRSS=1359.4 MB | VmHWM=1415.8 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=976.0 MB (Peak=976.0 MB)
+[RSS Breakdown | Step 1 After Backward] VmRSS=1477.9 MB | VmHWM=1478.1 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=532.6 MB (Peak=1086.4 MB)
+[RSS Breakdown | Step 1 After Cleanup & Pool Trim] VmRSS=922.8 MB | VmHWM=1489.6 MB | Swap=0.0 MB | Q8_Weights=362.6 MB | FP32_Model=519.6 MB | MemPool_Use=531.9 MB (Peak=1086.4 MB)
+[2026-11-27 15:22:13.149] Step  1/1 | Loss = 4.9903 | RSS = 922.8 MB | Fwd = 7377.0 ms | Bwd = 19451.4 ms | Total = 27123.0 ms
+
+========================================================================
+SUCCESS: Multimodal Projector Training Completed Successfully.
+========================================================================

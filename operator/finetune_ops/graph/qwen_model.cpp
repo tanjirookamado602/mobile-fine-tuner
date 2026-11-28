@@ -480,6 +480,15 @@ TensorPtr QwenModel::forward_hidden_from_embeds(const TensorPtr& x_in, const Ten
         for (auto* lin : {layers_[i].q_lin.get(),layers_[i].k_lin.get(),layers_[i].v_lin.get(),layers_[i].o_lin.get()})
             if(lin) { auto p=lin->trainable_parameters();captures.insert(captures.end(),p.begin(),p.end()); }
         x = activation_checkpointing_ ? checkpoint(block_forward,x,captures) : block_forward(x);
+        if (const char* dump_dir = std::getenv("QWEN_DUMP_LAYERED")) {
+            if (i == 0 || i == 11 || i == 23) {
+                std::string p = std::string(dump_dir) + "/block_" + std::to_string(i) + ".bin";
+                std::ofstream df(p, std::ios::binary);
+                if (df.is_open()) {
+                    df.write(reinterpret_cast<const char*>(x->data_ptr()), x->numel() * sizeof(float));
+                }
+            }
+        }
         if (offload_) offload_->offload_all();
     }
     if (offload_) offload_->load(1);

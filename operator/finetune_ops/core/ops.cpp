@@ -1276,14 +1276,16 @@ TensorPtr softmax(const TensorPtr& x, int dim) {
 
         float max_val = *std::max_element(batch_data, batch_data + feature_size);
 
-        float sum = 0.0f;
+        double sum = 0.0;
         for (int64_t i = 0; i < feature_size; ++i) {
-            batch_result[i] = std::exp(batch_data[i] - max_val);
-            sum += batch_result[i];
+            float e = std::exp(batch_data[i] - max_val);
+            batch_result[i] = e;
+            sum += static_cast<double>(e);
         }
 
+        float inv_sum = static_cast<float>(1.0 / sum);
         for (int64_t i = 0; i < feature_size; ++i) {
-            batch_result[i] /= sum;
+            batch_result[i] *= inv_sum;
         }
     }
 
@@ -1334,14 +1336,14 @@ TensorPtr log_softmax(const TensorPtr& x, int dim) {
 
         float max_val = *std::max_element(batch_data, batch_data + feature_size);
 
-        float log_sum_exp = 0.0f;
+        double sum_exp = 0.0;
         for (int64_t i = 0; i < feature_size; ++i) {
-            log_sum_exp += std::exp(batch_data[i] - max_val);
+            sum_exp += std::exp(static_cast<double>(batch_data[i] - max_val));
         }
-        log_sum_exp = max_val + std::log(log_sum_exp);
+        double log_sum_exp = static_cast<double>(max_val) + std::log(sum_exp);
 
         for (int64_t i = 0; i < feature_size; ++i) {
-            batch_result[i] = batch_data[i] - log_sum_exp;
+            batch_result[i] = static_cast<float>(static_cast<double>(batch_data[i]) - log_sum_exp);
         }
     }
 

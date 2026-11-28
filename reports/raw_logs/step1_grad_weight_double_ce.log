@@ -1,0 +1,18 @@
+=== Step-1 Gradients (C++ double-CE vs PyTorch tanh) ===
+  ln_w      : cos=1.000000, rel_err=9.875e-05
+  ln_b      : cos=1.000000, rel_err=1.144e-04
+  W1        : cos=1.000064, rel_err=1.125e-04
+  b1        : cos=1.000000, rel_err=1.142e-04
+  W2        : cos=1.000059, rel_err=1.144e-04
+  b2        : cos=1.000000, rel_err=1.168e-04
+  scale     : cos=1.000000, rel_err=1.373e-04
+  pos_embed : cos=1.000001, rel_err=1.246e-04
+=== Step-1 Updated Weights (C++ double-CE vs PyTorch tanh) ===
+  ln_w      : rel_err=1.515e-07
+  ln_b      : rel_err=3.654e-06
+  W1        : rel_err=4.648e-04
+  b1        : rel_err=4.346e-06
+  W2        : rel_err=4.771e-04
+  b2        : rel_err=7.355e-07
+  scale     : rel_err=0.000e+00
+  pos_embed : rel_err=5.294e-04

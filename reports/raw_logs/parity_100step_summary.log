@@ -1,0 +1,8 @@
+Steps compared: 100
+Step 1   : PT=5.120417, CPP=5.120460, abs=4.288e-05, rel=8.375e-06
+Step 10  : PT=2.200286, CPP=2.199730, abs=5.561e-04, rel=2.528e-04
+Step 50  : PT=0.513610, CPP=0.513969, abs=3.594e-04, rel=6.998e-04
+Step 100 : PT=0.489961, CPP=0.490527, abs=5.661e-04, rel=1.155e-03
+Max rel err: 3.247e-01 (at Step 21), Median rel err: 9.118e-04
+Steps <= 1e-5 rel err: 1/100
+Saved reports/figures/parity_100step_loss_and_error.png

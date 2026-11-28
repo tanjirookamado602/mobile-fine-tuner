@@ -1,0 +1,27 @@
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077186
+    grad ln_b      : norm=0.085083
+    grad W1        : norm=3.569806
+    grad b1        : norm=0.141704
+    grad W2        : norm=3.791677
+    grad b2        : norm=0.404390
+    grad scale     : norm=4.668447
+    grad pos_embed : norm=11.906748
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713331
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302883
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300717
+    after step1 b2        : norm=0.562945
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710175
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120464 | Time = 11645.7 ms | VmRSS = 2480.3 MB | VmHWM = 3835.1 MB
+  C++ (FP32) Step 2: Loss = 4.557731 | Time = 10001.9 ms | VmRSS = 2424.1 MB | VmHWM = 3835.1 MB
+  C++ (FP32) Step 3: Loss = 4.565368 | Time = 10232.4 ms | VmRSS = 2480.2 MB | VmHWM = 3835.1 MB
+  C++ (FP32) Step 4: Loss = 3.968551 | Time = 8692.5 ms | VmRSS = 2423.9 MB | VmHWM = 3835.1 MB
+  C++ (FP32) Step 5: Loss = 3.719152 | Time = 8481.3 ms | VmRSS = 2480.1 MB | VmHWM = 3835.1 MB

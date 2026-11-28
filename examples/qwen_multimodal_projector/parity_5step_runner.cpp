@@ -254,6 +254,22 @@ int main(int argc, char** argv) {
         auto h = qwen->forward_hidden_from_embeds(spliced);
         auto logits = qwen->lm_head(h);
 
+        if (step == 1) {
+            if (const char* ldir = std::getenv("QWEN_DUMP_LAYERED")) {
+                std::filesystem::create_directories(ldir);
+                std::string ld(ldir);
+                save_bin(ld + "/text_embeds.bin", text_embeds);
+                save_bin(ld + "/ln_out.bin", ln_out);
+                save_bin(ld + "/h1.bin", h1);
+                save_bin(ld + "/gelu.bin", act);
+                save_bin(ld + "/h2.bin", h2);
+                save_bin(ld + "/p_tokens.bin", p_tokens);
+                save_bin(ld + "/spliced.bin", spliced);
+                save_bin(ld + "/final_norm.bin", h);
+                save_bin(ld + "/logits.bin", logits);
+            }
+        }
+
         int64_t total_seq = spliced->shape()[1];
         int64_t pred_seq = total_seq - 1;
         auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});

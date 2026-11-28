@@ -1,0 +1,13 @@
+=== Layered Forward Activation Parity (C++ FP32 vs PyTorch FP32) ===
+  text_embeds : rel_l2=0.000e+00, max_abs=0.000e+00, cos=1.000004
+  ln_out      : rel_l2=2.332e-07, max_abs=9.537e-06, cos=1.000001
+  h1          : rel_l2=3.821e-07, max_abs=1.788e-06, cos=1.000000
+  gelu        : rel_l2=4.365e-07, max_abs=1.788e-06, cos=1.000000
+  h2          : rel_l2=5.536e-07, max_abs=7.153e-07, cos=1.000000
+  p_tokens    : rel_l2=1.172e-07, max_abs=1.118e-08, cos=1.000001
+  spliced     : rel_l2=9.636e-08, max_abs=1.118e-08, cos=0.999997
+  block_0     : rel_l2=9.587e-06, max_abs=5.460e-05, cos=1.000002
+  block_11    : rel_l2=1.045e-06, max_abs=6.104e-04, cos=1.000042
+  block_23    : rel_l2=1.048e-05, max_abs=1.663e-03, cos=1.000001
+  final_norm  : rel_l2=1.175e-05, max_abs=6.699e-03, cos=1.000002
+  logits      : rel_l2=8.151e-06, max_abs=6.177e-04, cos=1.001173

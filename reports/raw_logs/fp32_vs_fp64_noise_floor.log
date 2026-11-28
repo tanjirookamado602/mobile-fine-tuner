@@ -1,0 +1,18 @@
+=== PyTorch FP32 vs FP64 Noise Floor (data/parity_test) ===
+FP64 Loss: 5.1204637538
+FP32 Loss: 5.1204171181
+Abs Error: 4.664e-05 | Rel Error: 9.108e-06
+
+Layer-by-Layer FP32 vs FP64 Relative L2 Error:
+  text_embeds : rel_l2=0.000e+00, max_abs=0.000e+00
+  ln_out      : rel_l2=5.738e-08, max_abs=2.663e-06
+  h1          : rel_l2=2.352e-07, max_abs=1.289e-06
+  gelu        : rel_l2=2.583e-07, max_abs=1.427e-06
+  h2          : rel_l2=3.522e-07, max_abs=3.478e-07
+  p_tokens    : rel_l2=7.596e-08, max_abs=6.224e-09
+  spliced     : rel_l2=6.246e-08, max_abs=6.224e-09
+  block_0     : rel_l2=6.640e-06, max_abs=6.716e-05
+  block_11    : rel_l2=8.866e-07, max_abs=1.422e-03
+  block_23    : rel_l2=6.612e-06, max_abs=1.430e-03
+  final_norm  : rel_l2=7.829e-06, max_abs=3.850e-03
+  logits      : rel_l2=5.170e-06, max_abs=3.880e-04

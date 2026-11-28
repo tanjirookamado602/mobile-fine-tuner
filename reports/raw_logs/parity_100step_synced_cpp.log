@@ -1,0 +1,122 @@
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077186
+    grad ln_b      : norm=0.085083
+    grad W1        : norm=3.569797
+    grad b1        : norm=0.141704
+    grad W2        : norm=3.791668
+    grad b2        : norm=0.404390
+    grad scale     : norm=4.668503
+    grad pos_embed : norm=11.906701
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713331
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302882
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300717
+    after step1 b2        : norm=0.562945
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710175
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120463 | Time = 15378.0 ms | VmRSS = 2366.2 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 2: Loss = 4.557578 | Time = 18840.0 ms | VmRSS = 2366.2 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 3: Loss = 4.564918 | Time = 11893.3 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 4: Loss = 3.967851 | Time = 13466.8 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 5: Loss = 3.718616 | Time = 10851.5 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 6: Loss = 3.443890 | Time = 11371.5 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 7: Loss = 3.189126 | Time = 11612.9 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 8: Loss = 2.860610 | Time = 14022.1 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 9: Loss = 2.558987 | Time = 14772.8 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 10: Loss = 2.200206 | Time = 11758.1 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 11: Loss = 1.947242 | Time = 13318.7 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 12: Loss = 1.701132 | Time = 14715.7 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 13: Loss = 1.481072 | Time = 12295.6 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 14: Loss = 1.242948 | Time = 11623.9 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 15: Loss = 1.032879 | Time = 13320.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 16: Loss = 1.117805 | Time = 12921.9 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 17: Loss = 1.069947 | Time = 11820.4 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 18: Loss = 0.979901 | Time = 12590.2 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 19: Loss = 0.885749 | Time = 13222.2 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 20: Loss = 0.811759 | Time = 12602.8 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 21: Loss = 0.718253 | Time = 12346.2 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 22: Loss = 0.657162 | Time = 11098.6 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 23: Loss = 0.630460 | Time = 11827.6 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 24: Loss = 0.603784 | Time = 16184.8 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 25: Loss = 0.584999 | Time = 11643.7 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 26: Loss = 0.572992 | Time = 12079.6 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 27: Loss = 0.564724 | Time = 12889.2 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 28: Loss = 0.558015 | Time = 14189.5 ms | VmRSS = 2366.0 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 29: Loss = 0.553863 | Time = 11595.1 ms | VmRSS = 2366.1 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 30: Loss = 0.549532 | Time = 13399.4 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 31: Loss = 0.545455 | Time = 13606.7 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 32: Loss = 0.542688 | Time = 14404.2 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 33: Loss = 0.540374 | Time = 12908.4 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 34: Loss = 0.538049 | Time = 12625.2 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 35: Loss = 0.535477 | Time = 13124.1 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 36: Loss = 0.532965 | Time = 12111.0 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 37: Loss = 0.530808 | Time = 11302.3 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 38: Loss = 0.528954 | Time = 12661.2 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 39: Loss = 0.527306 | Time = 10965.6 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 40: Loss = 0.525804 | Time = 11691.8 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 41: Loss = 0.524397 | Time = 11991.2 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 42: Loss = 0.523020 | Time = 11999.1 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 43: Loss = 0.521628 | Time = 13264.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 44: Loss = 0.520248 | Time = 12115.9 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 45: Loss = 0.518950 | Time = 10886.1 ms | VmRSS = 2365.9 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 46: Loss = 0.517775 | Time = 12036.4 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 47: Loss = 0.516695 | Time = 12898.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 48: Loss = 0.515653 | Time = 12861.6 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 49: Loss = 0.514626 | Time = 12099.7 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 50: Loss = 0.513634 | Time = 11637.0 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 51: Loss = 0.512706 | Time = 14733.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 52: Loss = 0.511831 | Time = 14602.1 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 53: Loss = 0.510975 | Time = 12879.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 54: Loss = 0.510131 | Time = 13451.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 55: Loss = 0.509326 | Time = 14048.0 ms | VmRSS = 2365.6 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 56: Loss = 0.508572 | Time = 13622.0 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 57: Loss = 0.507845 | Time = 11810.8 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 58: Loss = 0.507134 | Time = 12545.5 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 59: Loss = 0.506444 | Time = 11534.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 60: Loss = 0.505767 | Time = 12643.9 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 61: Loss = 0.505099 | Time = 12146.3 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 62: Loss = 0.504462 | Time = 11858.7 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 63: Loss = 0.503869 | Time = 12264.6 ms | VmRSS = 2365.6 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 64: Loss = 0.503294 | Time = 12147.5 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 65: Loss = 0.502716 | Time = 12966.0 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 66: Loss = 0.502160 | Time = 11336.4 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 67: Loss = 0.501640 | Time = 12579.3 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 68: Loss = 0.501136 | Time = 14353.0 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 69: Loss = 0.500643 | Time = 12180.8 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 70: Loss = 0.500157 | Time = 11705.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 71: Loss = 0.499683 | Time = 14426.7 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 72: Loss = 0.499233 | Time = 13915.7 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 73: Loss = 0.498798 | Time = 16700.8 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 74: Loss = 0.498372 | Time = 13380.3 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 75: Loss = 0.497962 | Time = 13381.2 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 76: Loss = 0.497562 | Time = 13099.4 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 77: Loss = 0.497169 | Time = 12829.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 78: Loss = 0.496792 | Time = 14387.2 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 79: Loss = 0.496426 | Time = 11608.2 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 80: Loss = 0.496062 | Time = 10992.5 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 81: Loss = 0.495710 | Time = 13436.6 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 82: Loss = 0.495370 | Time = 10665.1 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 83: Loss = 0.495034 | Time = 13573.3 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 84: Loss = 0.494703 | Time = 12605.8 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 85: Loss = 0.494377 | Time = 12352.0 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 86: Loss = 0.494065 | Time = 12669.6 ms | VmRSS = 2365.6 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 87: Loss = 0.493763 | Time = 12466.4 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 88: Loss = 0.493465 | Time = 11390.0 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 89: Loss = 0.493174 | Time = 11042.8 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 90: Loss = 0.492889 | Time = 11691.4 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 91: Loss = 0.492612 | Time = 12290.5 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 92: Loss = 0.492343 | Time = 12332.1 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 93: Loss = 0.492081 | Time = 13865.8 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 94: Loss = 0.491827 | Time = 13789.9 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 95: Loss = 0.491579 | Time = 18476.3 ms | VmRSS = 2365.7 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 96: Loss = 0.491340 | Time = 15643.6 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 97: Loss = 0.491107 | Time = 13004.9 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 98: Loss = 0.490880 | Time = 13199.0 ms | VmRSS = 2365.6 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 99: Loss = 0.490658 | Time = 12079.3 ms | VmRSS = 2365.8 MB | VmHWM = 3834.6 MB
+  C++ (FP32) Step 100: Loss = 0.490442 | Time = 11471.1 ms | VmRSS = 2365.5 MB | VmHWM = 3834.6 MB

@@ -120,14 +120,13 @@ public:
                     max_val = std::max(max_val, logit_row[v]);
                 }
                 
-                // 计算分母
-                float denom = 0.0f;
+                double denom = 0.0;
                 for (int64_t v = 0; v < V; ++v) {
-                    denom += std::exp(logit_row[v] - max_val);
+                    denom += std::exp(static_cast<double>(logit_row[v] - max_val));
                 }
-                
+
                 // Write gradient: grad = (softmax - one_hot(y)) * local_coeff
-                float inv_denom = 1.0f / denom;
+                float inv_denom = static_cast<float>(1.0 / denom);
                 // grad_output: mean/sum is scalar; none is per-token weight
                 float outer = 1.0f;
                 if (grad_output && grad_output->numel() > 0) {

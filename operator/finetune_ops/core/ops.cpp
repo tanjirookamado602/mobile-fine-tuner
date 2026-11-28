@@ -1781,13 +1781,14 @@ TensorPtr layer_norm(const TensorPtr& input, const TensorPtr& weight, const Tens
     if (reduction == "none") {
         result = tensor(losses);
     } else if (reduction == "mean") {
-        float sum = std::accumulate(losses.begin(), losses.end(), 0.0f);
-        // 🔧 Key: for mean reduce only divide by valid samples, excluding ignored pads
-        float divisor = (valid_count > 0) ? static_cast<float>(valid_count) : 1.0f;
-        result = full({1}, sum / divisor);
+        double sum = 0.0;
+        for (float v : losses) sum += static_cast<double>(v);
+        double divisor = (valid_count > 0) ? static_cast<double>(valid_count) : 1.0;
+        result = full({1}, static_cast<float>(sum / divisor));
     } else if (reduction == "sum") {
-        float sum = std::accumulate(losses.begin(), losses.end(), 0.0f);
-        result = full({1}, sum);
+        double sum = 0.0;
+        for (float v : losses) sum += static_cast<double>(v);
+        result = full({1}, static_cast<float>(sum));
     } else {
         throw TensorError("cross_entropy_loss: invalid reduction '" + reduction + "'");
     }

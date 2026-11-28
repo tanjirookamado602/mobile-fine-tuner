@@ -1,0 +1,29 @@
+Exported data/parity_test/batches_50.bin (50 diverse batches)
+Exported data/parity_test/real100_b2.bin (100 B=2 batches)
+
+Loading Qwen2.5-0.5B in FP64...
+PT FP64 50-batch done in 243.8s (mean=5.484786)
+  PT64 Step  1/20: 5.12046375
+  PT64 Step  2/20: 4.55773893
+  PT64 Step  3/20: 4.56530781
+  PT64 Step  4/20: 3.96866825
+  PT64 Step  5/20: 3.71937406
+  PT64 Step  6/20: 3.44323851
+  PT64 Step  7/20: 3.18928048
+  PT64 Step  8/20: 2.85402268
+  PT64 Step  9/20: 2.55519912
+  PT64 Step 10/20: 2.20105725
+  PT64 Step 11/20: 1.94875957
+  PT64 Step 12/20: 1.70457816
+  PT64 Step 13/20: 1.48384416
+  PT64 Step 14/20: 1.24629571
+  PT64 Step 15/20: 0.99784317
+  PT64 Step 16/20: 0.86616386
+  PT64 Step 17/20: 0.74293352
+  PT64 Step 18/20: 0.79777527
+  PT64 Step 19/20: 0.68068002
+  PT64 Step 20/20: 1.64683907
+
+Loading Qwen2.5-0.5B in FP32...
+PT FP32 50-batch done (mean=5.484734)
+Saved data/parity_test/pt_stage1_ref.json (total 527.9s)

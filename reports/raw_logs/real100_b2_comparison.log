@@ -1,0 +1,6 @@
+Real B=2 (100 steps, different batches):
+  Step 1   : PT=5.075089, C++=5.075144, abs=5.532e-05, rel=1.090e-05
+  Step 10  : PT=4.026906, C++=4.023022, abs=3.884e-03, rel=9.645e-04
+  Step 50  : PT=1.448700, C++=1.224876, abs=2.238e-01, rel=1.545e-01
+  Step 100 : PT=0.431397, C++=0.434204, abs=2.807e-03, rel=6.507e-03
+  Median rel err: 2.012e-02 | Max rel err: 4.305e-01 (Step 60) | <=1e-5: 2/100

@@ -1,0 +1,21 @@
+=== Perturbed PyTorch FP32 (5x, 1e-7 rel init noise) Spread vs C++-PT Diff ===
+  Step   1: PT32=5.120417 | PertBand=[5.120416, 5.120418] (rel_spread=2.79e-07) | PT_omp4=5.120417 (rel=9.31e-08) | C++_free=5.120460 (rel=8.47e-06) | C++_sync=5.120463 (rel=9.13e-06)
+  Step  10: PT32=2.200148 | PertBand=[2.200110, 2.200258] (rel_spread=6.72e-05) | PT_omp4=2.200286 (rel=6.26e-05) | C++_free=2.199730 (rel=1.90e-04) | C++_sync=2.200206 (rel=2.61e-05)
+  Step  15: PT32=1.032816 | PertBand=[1.031387, 1.036534] (rel_spread=4.98e-03) | PT_omp4=1.033309 (rel=4.78e-04) | C++_free=0.998789 (rel=3.29e-02) | C++_sync=1.032879 (rel=6.17e-05)
+  Step  16: PT32=1.117739 | PertBand=[1.106553, 1.169605] (rel_spread=5.64e-02) | PT_omp4=1.134715 (rel=1.52e-02) | C++_free=0.869057 (rel=2.22e-01) | C++_sync=1.117805 (rel=5.92e-05)
+  Step  17: PT32=1.069887 | PertBand=[1.027285, 1.072556] (rel_spread=4.23e-02) | PT_omp4=1.062409 (rel=6.99e-03) | C++_free=0.827774 (rel=2.26e-01) | C++_sync=1.069947 (rel=5.61e-05)
+  Step  18: PT32=0.979839 | PertBand=[0.939775, 0.980860] (rel_spread=4.19e-02) | PT_omp4=0.972998 (rel=6.98e-03) | C++_free=0.773373 (rel=2.11e-01) | C++_sync=0.979901 (rel=6.29e-05)
+  Step  19: PT32=0.885688 | PertBand=[0.854920, 0.885653] (rel_spread=3.47e-02) | PT_omp4=0.880612 (rel=5.73e-03) | C++_free=0.752264 (rel=1.51e-01) | C++_sync=0.885749 (rel=6.88e-05)
+  Step  20: PT32=0.811703 | PertBand=[0.779122, 0.811260] (rel_spread=3.96e-02) | PT_omp4=0.806618 (rel=6.26e-03) | C++_free=1.035260 (rel=2.75e-01) | C++_sync=0.811759 (rel=6.86e-05)
+  Step  21: PT32=0.718206 | PertBand=[0.693821, 0.717074] (rel_spread=3.24e-02) | PT_omp4=0.713907 (rel=5.99e-03) | C++_free=0.945731 (rel=3.17e-01) | C++_sync=0.718253 (rel=6.44e-05)
+  Step  22: PT32=0.657126 | PertBand=[0.642724, 0.657146] (rel_spread=2.19e-02) | PT_omp4=0.654556 (rel=3.91e-03) | C++_free=0.806676 (rel=2.28e-01) | C++_sync=0.657162 (rel=5.41e-05)
+  Step  25: PT32=0.584979 | PertBand=[0.580134, 0.584894] (rel_spread=8.14e-03) | PT_omp4=0.584857 (rel=2.09e-04) | C++_free=0.597426 (rel=2.13e-02) | C++_sync=0.584999 (rel=3.49e-05)
+  Step  50: PT32=0.513628 | PertBand=[0.513271, 0.513651] (rel_spread=7.40e-04) | PT_omp4=0.513610 (rel=3.59e-05) | C++_free=0.513969 (rel=6.64e-04) | C++_sync=0.513634 (rel=1.25e-05)
+  Step 100: PT32=0.490440 | PertBand=[0.489431, 0.490611] (rel_spread=2.41e-03) | PT_omp4=0.489961 (rel=9.76e-04) | C++_free=0.490527 (rel=1.78e-04) | C++_sync=0.490442 (rel=4.32e-06)
+Max Perturbed rel spread: 5.641e-02 (at Step 16)
+Max PT(omp=4) vs PT(omp=2) rel diff: 1.519e-02 (at Step 16)
+Free C++ vs PT_ref: med_rel=6.834e-04, max_rel=3.168e-01 (Step 21), <=1e-5: 1/100
+Synced C++ vs PT_ref: med_rel=1.193e-05, max_rel=6.878e-05 (Step 19), <=1e-5: 44/100
+Saved reports/figures/parity_100step_loss_and_error.png
+Saved reports/figures/real_b2_100step_parity.png
+Saved reports/figures/colab_epoch_val_curve.png

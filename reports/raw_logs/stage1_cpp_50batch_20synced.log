@@ -1,0 +1,97 @@
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Eval batch 1/50: Loss = 5.120464
+  Eval batch 10/50: Loss = 5.289043
+  Eval batch 20/50: Loss = 6.775123
+  Eval batch 30/50: Loss = 6.752835
+  Eval batch 40/50: Loss = 5.222088
+  Eval batch 50/50: Loss = 4.975584
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077186
+    grad ln_b      : norm=0.085083
+    grad W1        : norm=3.569806
+    grad b1        : norm=0.141704
+    grad W2        : norm=3.791677
+    grad b2        : norm=0.404390
+    grad scale     : norm=4.668447
+    grad pos_embed : norm=11.906748
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713331
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302883
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300717
+    after step1 b2        : norm=0.562945
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710175
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120464 | Time = 8929.6 ms | VmRSS = 2367.2 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 2: Loss = 4.557735 | Time = 9025.1 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 3: Loss = 4.565305 | Time = 10201.5 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 4: Loss = 3.968667 | Time = 8312.7 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 5: Loss = 3.719374 | Time = 8682.2 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 6: Loss = 3.443237 | Time = 8824.8 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 7: Loss = 3.189278 | Time = 7930.5 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 8: Loss = 2.854024 | Time = 9190.6 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 9: Loss = 2.555198 | Time = 8767.9 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 10: Loss = 2.201058 | Time = 8193.9 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 11: Loss = 1.948760 | Time = 8544.6 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 12: Loss = 1.704579 | Time = 9406.4 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 13: Loss = 1.483844 | Time = 9535.8 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 14: Loss = 1.246297 | Time = 10211.4 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 15: Loss = 0.997843 | Time = 8756.6 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 16: Loss = 0.866165 | Time = 9868.4 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 17: Loss = 0.742934 | Time = 8769.6 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 18: Loss = 0.797780 | Time = 10944.3 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 19: Loss = 0.680681 | Time = 8204.7 ms | VmRSS = 2367.0 MB | VmHWM = 3834.7 MB
+  C++ (FP32) Step 20: Loss = 1.646819 | Time = 13514.8 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077186
+    grad ln_b      : norm=0.085083
+    grad W1        : norm=3.569806
+    grad b1        : norm=0.141704
+    grad W2        : norm=3.791677
+    grad b2        : norm=0.404390
+    grad scale     : norm=4.668447
+    grad pos_embed : norm=11.906748
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713331
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302883
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300717
+    after step1 b2        : norm=0.562945
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710175
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120464 | Time = 9341.8 ms | VmRSS = 2367.2 MB | VmHWM = 3834.9 MB
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077189
+    grad ln_b      : norm=0.085087
+    grad W1        : norm=3.569961
+    grad b1        : norm=0.141710
+    grad W2        : norm=3.791853
+    grad b2        : norm=0.404410
+    grad scale     : norm=4.668934
+    grad pos_embed : norm=11.907229
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713331
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302892
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300711
+    after step1 b2        : norm=0.562945
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710176
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120462 | Time = 11895.1 ms | VmRSS = 2367.1 MB | VmHWM = 3834.7 MB

@@ -1,6 +1,7 @@
 #include "finetune_ops/core/tensor.h"
 #include "finetune_ops/core/ops.h"
 #include "finetune_ops/core/autograd_engine.h"
+#include "finetune_ops/core/lm_loss.h"
 #include "finetune_ops/core/memory_manager.h"
 #include "finetune_ops/core/quant_io.h"
 #include "finetune_ops/graph/auto_model.h"
@@ -120,13 +121,24 @@ static std::pair<double, double> read_proc_mem_mb() {
 
 int main(int argc, char** argv) {
     bool use_q8 = false;
+    bool selected_loss = false;
     int max_steps = 5;
+    std::string sync_weights_path;
+    std::string eval_batches_path;
+    std::string real_batches_path;
+    std::string out_json_path;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--q8") use_q8 = true;
+        else if (a == "--selected_loss") selected_loss = true;
         else if (a == "--steps" && i + 1 < argc) max_steps = std::stoi(argv[++i]);
+        else if (a == "--sync_weights" && i + 1 < argc) sync_weights_path = argv[++i];
+        else if (a == "--eval_batches" && i + 1 < argc) eval_batches_path = argv[++i];
+        else if (a == "--real_batches" && i + 1 < argc) real_batches_path = argv[++i];
+        else if (a == "--out_json" && i + 1 < argc) out_json_path = argv[++i];
     }
     std::string data_dir = "data/parity_test";
+    if (out_json_path.empty()) out_json_path = data_dir + "/cpp_losses.json";
     std::string dump_dir = data_dir + (use_q8 ? "/cpp_dump_q8" : "/cpp_dump");
     std::filesystem::create_directories(dump_dir);
     std::string model_dir = "models/Qwen2.5-0.5B";
@@ -232,6 +244,143 @@ int main(int argc, char** argv) {
 
     SimpleAdam optimizer(1e-3f);
 
+    if (!eval_batches_path.empty()) {
+        std::ifstream bf(eval_batches_path, std::ios::binary);
+        if (!bf.is_open()) { std::cerr << "Cannot open " << eval_batches_path << "\n"; return 1; }
+        int32_t count = 0;
+        bf.read(reinterpret_cast<char*>(&count), sizeof(int32_t));
+        ops::autograd::Engine::instance().set_enabled(false);
+        std::vector<float> bl;
+        for (int b = 0; b < count; ++b) {
+            int32_t seq_t = 0;
+            bf.read(reinterpret_cast<char*>(&seq_t), sizeof(int32_t));
+            auto vf = zeros({1, 64, 768}, kFloat32, kCPU);
+            bf.read(reinterpret_cast<char*>(vf->data_ptr()), 64 * 768 * sizeof(float));
+            std::vector<int32_t> b_in(seq_t), b_lb(seq_t);
+            bf.read(reinterpret_cast<char*>(b_in.data()), seq_t * sizeof(int32_t));
+            bf.read(reinterpret_cast<char*>(b_lb.data()), seq_t * sizeof(int32_t));
+            auto idt = zeros({1, seq_t}, DType::kInt32, kCPU);
+            std::memcpy(idt->data_ptr(), b_in.data(), seq_t * sizeof(int32_t));
+            auto te = lookup_embeds(qwen->embedding_weight(), idt);
+            auto ln_out = layer_norm(vf, ln_w, ln_b);
+            auto h1 = add(matmul_rhs_T(ln_out, W1), b1);
+            auto act = gelu(h1);
+            auto h2 = add(matmul_rhs_T(act, W2), b2);
+            auto p_tok = add(mul(h2, scale), pos_embed);
+            auto sp = concat(std::vector<TensorPtr>{p_tok, te}, 1);
+            auto h = qwen->forward_hidden_from_embeds(sp);
+            auto logits = qwen->lm_head(h);
+            int64_t pred_seq = sp->shape()[1] - 1;
+            auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
+            auto tg = zeros({pred_seq}, DType::kInt32, kCPU);
+            int32_t* tp = static_cast<int32_t*>(tg->data_ptr());
+            for (int64_t i = 0; i < pred_seq; ++i) {
+                if (i < 63) tp[i] = -100;
+                else { int64_t ti = i - 63; tp[i] = (ti < seq_t) ? b_lb[ti] : -100; }
+            }
+            auto loss = cross_entropy_loss(flat_l, tg, "mean");
+            float lv = static_cast<const float*>(loss->data_ptr())[0];
+            bl.push_back(lv);
+            if ((b + 1) % 10 == 0 || b == 0)
+                std::cout << "  Eval batch " << (b + 1) << "/" << count << ": Loss = " << std::fixed << std::setprecision(6) << lv << "\n";
+        }
+        ops::autograd::Engine::instance().set_enabled(true);
+        std::ofstream oj(out_json_path);
+        oj << "[\n";
+        for (size_t i = 0; i < bl.size(); ++i) oj << "  " << std::setprecision(8) << bl[i] << (i + 1 < bl.size() ? ",\n" : "\n");
+        oj << "]\n";
+        return 0;
+    }
+
+    if (!real_batches_path.empty()) {
+        std::ifstream rf(real_batches_path, std::ios::binary);
+        if (!rf.is_open()) { std::cerr << "Cannot open " << real_batches_path << "\n"; return 1; }
+        int32_t nsteps = 0, bsz = 0;
+        rf.read(reinterpret_cast<char*>(&nsteps), sizeof(int32_t));
+        rf.read(reinterpret_cast<char*>(&bsz), sizeof(int32_t));
+        if (max_steps > 0 && max_steps < nsteps) nsteps = max_steps;
+        std::vector<float> rl;
+        for (int s = 1; s <= nsteps; ++s) {
+            auto t0 = std::chrono::steady_clock::now();
+            for (auto& p : params) p->zero_grad();
+            auto vf_all = zeros({bsz, 64, 768}, kFloat32, kCPU);
+            float* vf_ptr = static_cast<float*>(vf_all->data_ptr());
+            std::vector<std::vector<int32_t>> ins(bsz), lbs(bsz);
+            int32_t max_t = 0;
+            for (int b = 0; b < bsz; ++b) {
+                int32_t seq_t = 0;
+                rf.read(reinterpret_cast<char*>(&seq_t), sizeof(int32_t));
+                rf.read(reinterpret_cast<char*>(vf_ptr + b * 64 * 768), 64 * 768 * sizeof(float));
+                ins[b].resize(seq_t); lbs[b].resize(seq_t);
+                rf.read(reinterpret_cast<char*>(ins[b].data()), seq_t * sizeof(int32_t));
+                rf.read(reinterpret_cast<char*>(lbs[b].data()), seq_t * sizeof(int32_t));
+                if (seq_t > max_t) max_t = seq_t;
+            }
+            int32_t pad_id = 151643;
+            auto id_ten = zeros({bsz, max_t}, DType::kInt32, kCPU);
+            int32_t* id_ptr = static_cast<int32_t*>(id_ten->data_ptr());
+            int64_t total_seq = 64 + max_t;
+            auto attn_mask = zeros({bsz, total_seq}, kFloat32, kCPU);
+            float* am_ptr = static_cast<float*>(attn_mask->data_ptr());
+            for (int b = 0; b < bsz; ++b) {
+                for (int64_t t = 0; t < 64; ++t) am_ptr[b * total_seq + t] = 1.0f;
+                for (int t = 0; t < max_t; ++t) {
+                    if (t < static_cast<int>(ins[b].size())) {
+                        id_ptr[b * max_t + t] = ins[b][t];
+                        am_ptr[b * total_seq + 64 + t] = 1.0f;
+                    } else {
+                        id_ptr[b * max_t + t] = pad_id;
+                        am_ptr[b * total_seq + 64 + t] = 0.0f;
+                    }
+                }
+            }
+            auto te = lookup_embeds(qwen->embedding_weight(), id_ten);
+            auto ln_out = layer_norm(vf_all, ln_w, ln_b);
+            auto h1 = add(matmul_rhs_T(ln_out, W1), b1);
+            auto act = gelu(h1);
+            auto h2 = add(matmul_rhs_T(act, W2), b2);
+            auto p_tok = add(mul(h2, scale), pos_embed);
+            auto sp = concat(std::vector<TensorPtr>{p_tok, te}, 1);
+            auto h = qwen->forward_hidden_from_embeds(sp, attn_mask);
+            auto logits = qwen->lm_head(h);
+            int64_t pred_seq = total_seq - 1;
+            auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {bsz * pred_seq, 151936});
+            auto tg = zeros({bsz * pred_seq}, DType::kInt32, kCPU);
+            int32_t* tp = static_cast<int32_t*>(tg->data_ptr());
+            for (int b = 0; b < bsz; ++b) {
+                for (int64_t i = 0; i < pred_seq; ++i) {
+                    if (i < 63) tp[b * pred_seq + i] = -100;
+                    else {
+                        int64_t ti = i - 63;
+                        tp[b * pred_seq + i] = (ti < static_cast<int64_t>(lbs[b].size())) ? lbs[b][ti] : -100;
+                    }
+                }
+            }
+            auto loss = cross_entropy_loss(flat_l, tg, "mean");
+            float lv = static_cast<const float*>(loss->data_ptr())[0];
+            rl.push_back(lv);
+            loss->backward();
+            optimizer.step(params);
+            ops::autograd::Engine::instance().clear_graph();
+            MemoryManager::instance().clear_unused_memory();
+            double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            std::cout << "  C++ Real B=" << bsz << " Step " << s << "/" << nsteps
+                      << ": Loss = " << std::fixed << std::setprecision(6) << lv
+                      << " | Time = " << std::setprecision(1) << ms << " ms\n";
+        }
+        std::ofstream oj(out_json_path);
+        oj << "[\n";
+        for (size_t i = 0; i < rl.size(); ++i) oj << "  " << std::setprecision(8) << rl[i] << (i + 1 < rl.size() ? ",\n" : "\n");
+        oj << "]\n";
+        return 0;
+    }
+
+    std::ifstream sync_wf;
+    if (!sync_weights_path.empty()) {
+        sync_wf.open(sync_weights_path, std::ios::binary);
+        if (!sync_wf.is_open()) { std::cerr << "Cannot open " << sync_weights_path << "\n"; return 1; }
+    }
+
     auto text_id_tensor = zeros({1, 34}, DType::kInt32, kCPU);
     std::memcpy(text_id_tensor->data_ptr(), input_ids.data(), 34 * sizeof(int32_t));
     auto text_embeds = lookup_embeds(qwen->embedding_weight(), text_id_tensor);
@@ -240,6 +389,11 @@ int main(int argc, char** argv) {
 
     for (int step = 1; step <= max_steps; ++step) {
         auto t0 = std::chrono::steady_clock::now();
+        if (sync_wf.is_open()) {
+            for (auto& p : params) {
+                sync_wf.read(reinterpret_cast<char*>(p->data_ptr()), p->numel() * sizeof(float));
+            }
+        }
         for (auto& p : params) p->zero_grad();
 
         auto ln_out = layer_norm(v_feat, ln_w, ln_b);
@@ -252,41 +406,53 @@ int main(int argc, char** argv) {
         auto spliced = concat(std::vector<TensorPtr>{p_tokens, text_embeds}, 1);
 
         auto h = qwen->forward_hidden_from_embeds(spliced);
-        auto logits = qwen->lm_head(h);
-
-        if (step == 1) {
-            if (const char* ldir = std::getenv("QWEN_DUMP_LAYERED")) {
-                std::filesystem::create_directories(ldir);
-                std::string ld(ldir);
-                save_bin(ld + "/text_embeds.bin", text_embeds);
-                save_bin(ld + "/ln_out.bin", ln_out);
-                save_bin(ld + "/h1.bin", h1);
-                save_bin(ld + "/gelu.bin", act);
-                save_bin(ld + "/h2.bin", h2);
-                save_bin(ld + "/p_tokens.bin", p_tokens);
-                save_bin(ld + "/spliced.bin", spliced);
-                save_bin(ld + "/final_norm.bin", h);
-                save_bin(ld + "/logits.bin", logits);
-            }
-        }
-
         int64_t total_seq = spliced->shape()[1];
-        int64_t pred_seq = total_seq - 1;
-        auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
-
-        auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
-        int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
         int64_t prefix_len = 64;
-        for (int64_t i = 0; i < pred_seq; ++i) {
-            if (i < prefix_len - 1) {
-                tgt_ptr[i] = -100;
-            } else {
-                int64_t tidx = i - prefix_len + 1;
-                tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(labels.size())) ? labels[tidx] : -100;
+        TensorPtr loss;
+        if (selected_loss) {
+            auto full_labels = zeros({1, total_seq}, DType::kInt32, kCPU);
+            int32_t* lp = static_cast<int32_t*>(full_labels->data_ptr());
+            std::fill_n(lp, total_seq, -100);
+            for (size_t tidx = 0; tidx < labels.size(); ++tidx) {
+                if (prefix_len + static_cast<int64_t>(tidx) < total_seq)
+                    lp[prefix_len + tidx] = labels[tidx];
             }
-        }
+            loss = selected_token_lm_cross_entropy(h, qwen->embedding_weight(), full_labels, -100, "mean");
+        } else {
+            auto logits = qwen->lm_head(h);
 
-        auto loss = cross_entropy_loss(flat_l, targets, "mean");
+            if (step == 1) {
+                if (const char* ldir = std::getenv("QWEN_DUMP_LAYERED")) {
+                    std::filesystem::create_directories(ldir);
+                    std::string ld(ldir);
+                    save_bin(ld + "/text_embeds.bin", text_embeds);
+                    save_bin(ld + "/ln_out.bin", ln_out);
+                    save_bin(ld + "/h1.bin", h1);
+                    save_bin(ld + "/gelu.bin", act);
+                    save_bin(ld + "/h2.bin", h2);
+                    save_bin(ld + "/p_tokens.bin", p_tokens);
+                    save_bin(ld + "/spliced.bin", spliced);
+                    save_bin(ld + "/final_norm.bin", h);
+                    save_bin(ld + "/logits.bin", logits);
+                }
+            }
+
+            int64_t pred_seq = total_seq - 1;
+            auto flat_l = reshape(logits->slice(1, 0, pred_seq, 1), {pred_seq, 151936});
+
+            auto targets = zeros({pred_seq}, DType::kInt32, kCPU);
+            int32_t* tgt_ptr = static_cast<int32_t*>(targets->data_ptr());
+            for (int64_t i = 0; i < pred_seq; ++i) {
+                if (i < prefix_len - 1) {
+                    tgt_ptr[i] = -100;
+                } else {
+                    int64_t tidx = i - prefix_len + 1;
+                    tgt_ptr[i] = (tidx >= 0 && tidx < static_cast<int64_t>(labels.size())) ? labels[tidx] : -100;
+                }
+            }
+
+            loss = cross_entropy_loss(flat_l, targets, "mean");
+        }
         float loss_val = static_cast<const float*>(loss->data_ptr())[0];
         cpp_losses.push_back(loss_val);
 
@@ -328,10 +494,10 @@ int main(int argc, char** argv) {
 #endif
     }
 
-    std::ofstream out_cpp(data_dir + "/cpp_losses.json");
+    std::ofstream out_cpp(out_json_path);
     out_cpp << "[\n";
     for (size_t i = 0; i < cpp_losses.size(); ++i) {
-        out_cpp << "  " << std::setprecision(6) << cpp_losses[i] << (i + 1 < cpp_losses.size() ? ",\n" : "\n");
+        out_cpp << "  " << std::setprecision(8) << cpp_losses[i] << (i + 1 < cpp_losses.size() ? ",\n" : "\n");
     }
     out_cpp << "]\n";
 

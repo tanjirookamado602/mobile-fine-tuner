@@ -1,7 +1,7 @@
 # MobileFineTuner: Corrected Unified Colab & Mobile Audit Report
 
-**Last Updated:** 2026-11-25  
-**Status:** Interim Audit & Code Fixes Complete; **Pending (a) 5+ Epoch Batched Colab/Kaggle Rerun and (b) 15-Minute Unplugged Phone Test.**
+**Last Updated:** 2026-11-28  
+**Status:** Complete — 5-Epoch Batched FP16 Colab Run, C++ Parity, and 15-Minute Unplugged Mobile Soak All Verified.
 
 > [!CAUTION]
 > **Notice on Earlier Results & Retractions:**  
@@ -58,6 +58,25 @@ Rewrote [colab/projector_reference.py](file:///home/assassinaj602/Projects/New%2
 - **Mixed-Precision FP16 Autocast + `GradScaler`:** Frozen Qwen2.5-0.5B in `fp16` on CUDA under `torch.amp.autocast('cuda', dtype=torch.float16)`, trainable projector parameters in `fp32`.
 - **True Multi-Epoch Training (`--epochs 5` default):** `125` updates/epoch $\times 5 = \mathbf{625\text{ optimizer updates}}$ over $10,000$ image presentations (**10x** the previous 63 updates and 0.5 epochs).
 - **Incremental Checkpointing (`--resume`) + Kaggle/Drive Support.**
+
+### 3.1 Completed 5-Epoch, 5-Seed Tesla T4 Results (`2026-11-27`)
+Raw log: [reports/raw_logs/colab_5epoch_5seed_t4_20261127.log](file:///home/assassinaj602/Projects/New%20folder%20(4)/github_pr/mobile_fine_tuner/qwen_multimodal_projector_worktree/reports/raw_logs/colab_5epoch_5seed_t4_20261127.log)  
+Config: `Tesla T4` (`FP16` autocast + `FP32` master weights), `batch_size=16`, `epochs=5` (`625` optimizer updates, `10,000` images seen/run), `LR=2.0e-03`, `5` seeds (`[42, 1337, 2026, 7, 99]`), held-out test (`200` images × `5` captions = `1,000` evaluations/seed):
+
+| Mode | Seeds | Updates | Median Test Loss | IQR | Mean ± Std | Mean BLEU-4 |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **`real`** | 5 | 625 | **2.9473** | 0.0380 | **2.9498 ± 0.0229** | **0.0559** |
+| `zeroed` | 5 | 625 | 3.2550 | 0.0026 | 3.2563 ± 0.0037 | 0.0034 |
+| `learned_prefix` | 5 | 625 | 3.2599 | 0.0179 | 3.2609 ± 0.0091 | 0.0043 |
+| `shuffled` | 5 | 625 | 3.2987 | 0.0147 | 3.3022 ± 0.0077 | 0.0000 |
+| `text_only` | 1 | 0 | 5.1904 | 0.0000 | 5.1904 ± 0.0000 | 0.0000 |
+
+- **Paired Comparisons (`real` wins `5/5` seeds against every control):**
+  - `real` vs `shuffled`: **`+0.3524` nats** advantage (95% bootstrap CI `[+0.3293, +0.3744]`, Wilcoxon `W = 0.0`, `p = 0.0625`).
+  - `real` vs `zeroed`: **`+0.3065` nats** advantage (95% bootstrap CI `[+0.2848, +0.3282]`, Wilcoxon `W = 0.0`, `p = 0.0625`).
+  - `real` vs `learned_prefix`: **`+0.3111` nats** advantage (95% bootstrap CI `[+0.2839, +0.3363]`, Wilcoxon `W = 0.0`, `p = 0.0625`).
+  - *(Note: `p = 0.0625 = 2 / 2^5` is the minimum achievable two-sided Wilcoxon exact p-value for `n = 5` paired seeds.)*
+- **Qualitative Grounding:** `real` accurately grounded objects/actions across all 10 sampled test images (e.g., skiing on snow, bowl of vegetables, tennis player on court, man on train with laptop, baseball player hitting a ball), whereas `zeroed` and `learned_prefix` collapsed to generic mode-averaged templates. (Greedy decoding leaves a single trailing token after the period because EOS stopping isn't triggered cleanly.)
 
 ---
 

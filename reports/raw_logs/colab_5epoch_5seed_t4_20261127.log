@@ -1,0 +1,175 @@
+Fri Nov 27 16:22:19 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.82.07              Driver Version: 580.82.07      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla T4                       Off |   00000000:00:04.0 Off |                    0 |
+| N/A   56C    P8             14W /   70W |       0MiB /  15360MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
+!python colab/projector_reference.py --epochs 5 --batch_size 16 --num_seeds 5 --resume
+[2026-11-27 16:23:05] Runtime Device: cuda
+  GPU: Tesla T4
+  VRAM Total: 14.56 GB
+Attempting Google Drive mount...
+Note: Google Drive mount skipped ('NoneType' object has no attribute 'kernel'). Saving artifacts locally to ./colab_artifacts
+Downloading official COCO 2017 annotations from http://images.cocodataset.org/annotations/annotations_trainval2017.zip (241 MB)...
+Extracting annotation files...
+Loading captions_val2017.json...
+Data Source: COCO 2017 val2017 pool (5000 annotated images available).
+Strict Zero-Overlap Assertions PASSED: Train=2000, Val=200, Test=200.
+Verifying 2400 selected images...
+Image verification complete: 2400 images verified, 0 failed.
+Loading CLIP ViT-B/16 (openai/clip-vit-base-patch16), layer=penultimate, no_pool=False...
+Extracting features for 2400 images on cuda...
+Extraction complete in 47.4 s (50.7 imgs/s). Saved to ./coco_data/clip_vit_b16_features_penultimate_64tok.pt
+Loading Qwen/Qwen2.5-0.5B (dtype=float16)...
+
+================================================================================================
+  BATCHED MULTI-EPOCH MULTIMODAL BENCHMARK (5 Seeds: [42, 1337, 2026, 7, 99])
+  Arch: MLP | CLIP: penultimate | Tokens: 64 | LR: 2.0e-03
+  Epochs: 5 | Batch Size: 16 | Grad Accum: 1 | Optimizer Updates/Run: 625 | Images Seen/Run: 10000
+  Precision: FP16 Autocast + FP32 Master Weights
+================================================================================================
+Running Mode: [real          ] | Seed: 42   ... [W1127 16:29:21.206229820 CUDACachingAllocator.cpp:3934] memory allocation failed with OOM on device 0 while trying to allocate 2218786816 bytes (free: 1467809792, total: 15637086208).
+Done in 239.8 s | Updates: 625 | Epochs: 5 | Test Loss: 2.9205 | BLEU-4: 0.0591
+Running Mode: [real          ] | Seed: 1337 ... Done in 239.4 s | Updates: 625 | Epochs: 5 | Test Loss: 2.9818 | BLEU-4: 0.0000
+Running Mode: [real          ] | Seed: 2026 ... Done in 239.3 s | Updates: 625 | Epochs: 5 | Test Loss: 2.9473 | BLEU-4: 0.1105
+Running Mode: [real          ] | Seed: 7    ... Done in 239.6 s | Updates: 625 | Epochs: 5 | Test Loss: 2.9686 | BLEU-4: 0.1102
+Running Mode: [real          ] | Seed: 99   ... Done in 239.5 s | Updates: 625 | Epochs: 5 | Test Loss: 2.9306 | BLEU-4: 0.0000
+Running Mode: [shuffled      ] | Seed: 42   ... Done in 239.6 s | Updates: 625 | Epochs: 5 | Test Loss: 3.3107 | BLEU-4: 0.0000
+Running Mode: [shuffled      ] | Seed: 1337 ... Done in 239.7 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2935 | BLEU-4: 0.0000
+Running Mode: [shuffled      ] | Seed: 2026 ... Done in 239.7 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2959 | BLEU-4: 0.0000
+Running Mode: [shuffled      ] | Seed: 7    ... Done in 239.5 s | Updates: 625 | Epochs: 5 | Test Loss: 3.3120 | BLEU-4: 0.0000
+Running Mode: [shuffled      ] | Seed: 99   ... Done in 239.7 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2987 | BLEU-4: 0.0000
+Running Mode: [zeroed        ] | Seed: 42   ... Done in 239.7 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2635 | BLEU-4: 0.0169
+Running Mode: [zeroed        ] | Seed: 1337 ... Done in 239.8 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2534 | BLEU-4: 0.0000
+Running Mode: [zeroed        ] | Seed: 2026 ... Done in 239.5 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2534 | BLEU-4: 0.0000
+Running Mode: [zeroed        ] | Seed: 7    ... Done in 239.6 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2560 | BLEU-4: 0.0000
+Running Mode: [zeroed        ] | Seed: 99   ... Done in 239.3 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2550 | BLEU-4: 0.0000
+Running Mode: [learned_prefix] | Seed: 42   ... Done in 237.5 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2691 | BLEU-4: 0.0000
+Running Mode: [learned_prefix] | Seed: 1337 ... Done in 237.8 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2511 | BLEU-4: 0.0000
+Running Mode: [learned_prefix] | Seed: 2026 ... Done in 236.5 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2734 | BLEU-4: 0.0214
+Running Mode: [learned_prefix] | Seed: 7    ... Done in 237.4 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2512 | BLEU-4: 0.0000
+Running Mode: [learned_prefix] | Seed: 99   ... Done in 237.7 s | Updates: 625 | Epochs: 5 | Test Loss: 3.2599 | BLEU-4: 0.0000
+Running Mode: [text_only     ] (deterministic, no trainable params) ... Done in 0.0 s | Test Loss: 5.1904 | BLEU-4: 0.0000
+
+==============================================================================================================
+  FINAL HELD-OUT TEST EVALUATION SUMMARY (ALL 5 CAPTIONS PER IMAGE = 1,000 EVALUATIONS)
+==============================================================================================================
+Mode             | Seeds | Updates | Median Loss | IQR      | Mean ± Std         | Mean BLEU-4
+--------------------------------------------------------------------------------------------------------------
+real             | 5     | 625     | 2.9473      | 0.0380   | 2.9498 ± 0.0229   | 0.0559     
+shuffled         | 5     | 625     | 3.2987      | 0.0147   | 3.3022 ± 0.0077   | 0.0000     
+zeroed           | 5     | 625     | 3.2550      | 0.0026   | 3.2563 ± 0.0037   | 0.0034     
+learned_prefix   | 5     | 625     | 3.2599      | 0.0179   | 3.2609 ± 0.0091   | 0.0043     
+text_only        | 1     | 0       | 5.1904      | 0.0000   | 5.1904 ± 0.0000   | 0.0000     
+==============================================================================================================
+
+==========================================================================================
+  PAIRED HYPOTHESIS TESTING vs. CONTROLS (TWO-SIDED)
+==========================================================================================
+Real vs. shuffled       (Wins: 5/5):
+  Per-seed (shuffled - real): [0.3901, 0.3117, 0.3487, 0.3433, 0.3681]
+  Mean advantage of real: +0.3524 | 95% Bootstrap CI: [+0.3293, +0.3744]
+  Two-sided Wilcoxon signed-rank: W = 0.0, p = 6.2500e-02
+Real vs. zeroed         (Wins: 5/5):
+  Per-seed (zeroed - real): [0.343, 0.2716, 0.3061, 0.2874, 0.3244]
+  Mean advantage of real: +0.3065 | 95% Bootstrap CI: [+0.2848, +0.3282]
+  Two-sided Wilcoxon signed-rank: W = 0.0, p = 6.2500e-02
+Real vs. learned_prefix (Wins: 5/5):
+  Per-seed (learned_prefix - real): [0.3485, 0.2693, 0.3261, 0.2825, 0.3292]
+  Mean advantage of real: +0.3111 | 95% Bootstrap CI: [+0.2839, +0.3363]
+  Two-sided Wilcoxon signed-rank: W = 0.0, p = 6.2500e-02
+==========================================================================================
+
+==========================================================================================
+  QUALITATIVE EVALUATION: 10 TEST IMAGES (SEED 1)
+==========================================================================================
+
+[Image ID: 2473]
+  Ground Truth: "A man flying through the air while riding skis."
+  - [real          ]: "A man is skiing down a snowy slope.książka" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large glass window.étais" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 4495]
+  Ground Truth: "A living room with a couch and chair."
+  - [real          ]: "A couch and a television are sitting on a table.étaision" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large table with a lot of food.>manual food table" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 7991]
+  Ground Truth: "A plate topped with baby carrots and beans next to a  peeler."
+  - [real          ]: "A bowl of vegetables with a spoon and a knife.LIBINT" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large glass window.ומנים" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 8690]
+  Ground Truth: "The two young girls are petting the two goats."
+  - [real          ]: "A group of people are standing around a group of cows.之內容" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large glass window.étais" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 12120]
+  Ground Truth: "A couple of women playing a game of tennis on a tennis court."
+  - [real          ]: "A tennis player is playing tennis on a court.LIBINT" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large table with a lot of food.>manual food table" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 14226]
+  Ground Truth: "A man sitting on a train at a table using a laptop."
+  - [real          ]: "A man sitting on a train with a laptop.książka" (BLEU-4: 0.5912)
+  - [shuffled      ]: "A man is standing in front of a large building.ומנים" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.1694)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 14380]
+  Ground Truth: "A steel truss bridge carries a roadway over a rail yard."
+  - [real          ]: "A train is parked on a railroad track.>tag" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large building.ומנים" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 15335]
+  Ground Truth: "A group of people sitting at a table with food."
+  - [real          ]: "A little boy is sitting on a table with a plate of food.étais" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large glass window.étais" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 17182]
+  Ground Truth: "A brown desk with a wooden chair in a classroom."
+  - [real          ]: "A wooden table with a chair and a book on it. """"," (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is sitting on a bench with a laptop and a book.>manual" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+
+[Image ID: 18491]
+  Ground Truth: "A boy catches a ball as a player slides to the base."
+  - [real          ]: "A baseball player is hitting a ball.étais" (BLEU-4: 0.0000)
+  - [shuffled      ]: "A man is standing in front of a large glass window.ומנים" (BLEU-4: 0.0000)
+  - [zeroed        ]: "A man in a black shirt and jeans is standing in front of a large mirror.該使用者" (BLEU-4: 0.0000)
+  - [learned_prefix]: "A man is standing in front of a large building.該使用者" (BLEU-4: 0.0000)
+  - [text_only     ]: "Describe the image in detail.eña" (BLEU-4: 0.0000)
+==========================================================================================
+
+Saved complete benchmark artifacts to: ./colab_artifacts/pytorch_projector_reference_results.json

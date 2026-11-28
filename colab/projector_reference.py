@@ -595,11 +595,58 @@ def run_overfit_test(records, features_dict, qwen_model, tokenizer, device, arch
 # ==============================================================================
 # 8. Batched Multi-Epoch Training & Evaluation Engine
 # ==============================================================================
+class LoRALinear(nn.Module):
+    """Rank-r LoRA wrapper around a frozen nn.Linear layer (train A, B in FP32)."""
+
+    def __init__(self, base_linear: nn.Linear, rank: int = 16, alpha: float = 32.0):
+        super().__init__()
+        self.base = base_linear
+        self.rank = rank
+        self.scaling = alpha / float(rank)
+        in_f = base_linear.in_features
+        out_f = base_linear.out_features
+        dev = base_linear.weight.device
+        self.lora_A = nn.Parameter(torch.randn(in_f, rank, device=dev, dtype=torch.float32) * (1.0 / math.sqrt(rank)))
+        self.lora_B = nn.Parameter(torch.zeros(rank, out_f, device=dev, dtype=torch.float32))
+
+    def forward(self, x):
+        base_out = self.base(x)
+        delta = (x.float() @ self.lora_A) @ self.lora_B
+        return base_out + (delta * self.scaling).to(base_out.dtype)
+
+
+def attach_lora_to_attention(qwen_model, rank: int = 16, alpha: float = 32.0):
+    """Attach LoRA adapters to q_proj, k_proj, v_proj, o_proj across all decoder layers."""
+    lora_params = []
+    targets = ("q_proj", "k_proj", "v_proj", "o_proj")
+    for layer in qwen_model.model.layers:
+        attn = layer.self_attn
+        for name in targets:
+            mod = getattr(attn, name)
+            if isinstance(mod, nn.Linear):
+                wrapped = LoRALinear(mod, rank=rank, alpha=alpha)
+                setattr(attn, name, wrapped)
+                lora_params.extend([wrapped.lora_A, wrapped.lora_B])
+    return lora_params
+
+
+def detach_lora_from_attention(qwen_model):
+    """Restore original frozen nn.Linear attention projections."""
+    targets = ("q_proj", "k_proj", "v_proj", "o_proj")
+    for layer in qwen_model.model.layers:
+        attn = layer.self_attn
+        for name in targets:
+            mod = getattr(attn, name)
+            if isinstance(mod, LoRALinear):
+                setattr(attn, name, mod.base)
+
+
 def train_and_evaluate(
     mode, seed, lr, records, features_dict, qwen_model, tokenizer, device,
     prompt_ids, pad_id, tokenized, shuffle_map,
     epochs=5, batch_size=16, grad_accum=1, arch="mlp", num_tokens=64,
-    eval_batch_size=32, eval_test=True, val_every_epochs=1
+    eval_batch_size=32, eval_test=True, val_every_epochs=1,
+    print_epoch_curve=False, lora_stage=False, lora_rank=16, lora_lr=1e-5, lora_epochs=5
 ):
     torch.manual_seed(seed)
     random.seed(seed)
@@ -653,7 +700,7 @@ def train_and_evaluate(
 
     v_prefix_fn = make_prefix_fn()
 
-    def evaluate_split_all_captions(split_records):
+    def evaluate_split_all_captions(split_records, return_per_image=False):
         if projector is not None:
             projector.eval()
         if learned_prefix is not None:
@@ -665,6 +712,7 @@ def train_and_evaluate(
             for cap_toks in tokenized[r["image_id"]]
         ]
         all_losses = []
+        per_image_buckets = {}
         with torch.no_grad():
             for i in range(0, len(all_pairs), eval_batch_size):
                 chunk = all_pairs[i:i + eval_batch_size]
@@ -674,11 +722,23 @@ def train_and_evaluate(
                     num_tokens, per_sample=True
                 )
                 vals = per_item.detach().cpu().tolist()
-                all_losses.extend([v for v in vals if not math.isnan(v)])
-        return float(np.mean(all_losses)) if all_losses else float("nan")
+                for (iid, _), v in zip(chunk, vals):
+                    if not math.isnan(v):
+                        all_losses.append(v)
+                        per_image_buckets.setdefault(iid, []).append(v)
+        mean_loss = float(np.mean(all_losses)) if all_losses else float("nan")
+        if return_per_image:
+            per_image = [
+                {"image_id": r["image_id"], "loss": float(np.mean(per_image_buckets[r["image_id"]]))}
+                for r in split_records if r["image_id"] in per_image_buckets
+            ]
+            return mean_loss, per_image
+        return mean_loss
 
     step0_val_loss = evaluate_split_all_captions(val_recs)
     val_losses = [(0, step0_val_loss)]
+    if print_epoch_curve:
+        print(f"\n  [Epoch 0/{epochs}] Val Loss: {step0_val_loss:.4f}", flush=True)
 
     if projector is not None:
         projector.train()
@@ -693,6 +753,8 @@ def train_and_evaluate(
 
     if mode != "text_only" and optimizer is not None:
         for epoch in range(1, epochs + 1):
+            t_ep = time.time()
+            ep_losses = []
             epoch_recs = train_recs.copy()
             rng_order.shuffle(epoch_recs)
 
@@ -735,32 +797,111 @@ def train_and_evaluate(
                     scaler.update()
                     optimizer.zero_grad()
 
-                    update_losses.append(accum_loss_sum / accum_count)
+                    step_l = accum_loss_sum / accum_count
+                    update_losses.append(step_l)
+                    ep_losses.append(step_l)
                     accum_count = 0
                     accum_loss_sum = 0.0
 
             if epoch % val_every_epochs == 0 or epoch == epochs:
                 vl = evaluate_split_all_captions(val_recs)
                 val_losses.append((epoch, vl))
+                if print_epoch_curve:
+                    ep_dt = time.time() - t_ep
+                    tr_mean = float(np.mean(ep_losses)) if ep_losses else float("nan")
+                    print(f"  [Epoch {epoch:2d}/{epochs}] Time: {ep_dt:5.1f} s | Train Loss: {tr_mean:.4f} | Val Loss: {vl:.4f}", flush=True)
                 if projector is not None:
                     projector.train()
                 if learned_prefix is not None:
                     learned_prefix.train()
 
     elapsed = time.time() - t_start
+    best_ep, best_vl = min(val_losses, key=lambda x: x[1])
+    if print_epoch_curve and mode != "text_only":
+        print(f"  [Plateau Check] Best Val Loss: {best_vl:.4f} at Epoch {best_ep}/{epochs} | Avg Epoch Time: {elapsed / max(1, epochs):.1f} s", flush=True)
+
+    lora_info = None
+    if lora_stage and mode != "text_only" and projector is not None:
+        if device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        lora_params = attach_lora_to_attention(qwen_model, rank=lora_rank, alpha=float(lora_rank * 2))
+        proj_params = list(projector.parameters())
+        n_proj = sum(p.numel() for p in proj_params)
+        n_lora = sum(p.numel() for p in lora_params)
+        n_total = sum(p.numel() for p in qwen_model.parameters()) + n_proj
+        lora_opt = torch.optim.AdamW(proj_params + lora_params, lr=lora_lr, weight_decay=0.01)
+        lora_scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
+        t_lora = time.time()
+        lora_val_curve = []
+        for le in range(1, lora_epochs + 1):
+            t_lep = time.time()
+            projector.train()
+            qwen_model.train()
+            epoch_recs = train_recs.copy()
+            rng_order.shuffle(epoch_recs)
+            lora_opt.zero_grad()
+            ac = 0
+            for i in range(0, len(epoch_recs), batch_size):
+                chunk_recs = epoch_recs[i:i + batch_size]
+                batch_items = [
+                    (r["image_id"], tokenized[r["image_id"]][(le - 1 + idx_b) % len(tokenized[r["image_id"]])])
+                    for idx_b, r in enumerate(chunk_recs)
+                ]
+                loss = batched_forward_loss(
+                    mode, batch_items, v_prefix_fn, qwen_model, embed_layer,
+                    prompt_ids, pad_id, device, features_dict, shuffle_map,
+                    num_tokens, per_sample=False
+                )
+                lora_scaler.scale(loss / grad_accum).backward()
+                ac += 1
+                if ac == grad_accum or (i + batch_size >= len(epoch_recs)):
+                    lora_scaler.unscale_(lora_opt)
+                    torch.nn.utils.clip_grad_norm_(proj_params + lora_params, max_norm=1.0)
+                    lora_scaler.step(lora_opt)
+                    lora_scaler.update()
+                    lora_opt.zero_grad()
+                    ac = 0
+            qwen_model.eval()
+            lvl = evaluate_split_all_captions(val_recs)
+            lora_val_curve.append((le, lvl))
+            if print_epoch_curve:
+                print(f"  [LoRA Epoch {le:2d}/{lora_epochs}] Time: {time.time() - t_lep:5.1f} s | Val Loss: {lvl:.4f}", flush=True)
+        peak_mb = (torch.cuda.max_memory_allocated() / (1024 ** 2)) if device == "cuda" else 0.0
+        lora_info = {
+            "lora_rank": lora_rank,
+            "lora_lr": lora_lr,
+            "lora_epochs": lora_epochs,
+            "projector_params": n_proj,
+            "lora_params": n_lora,
+            "trainable_params": n_proj + n_lora,
+            "total_params": n_total,
+            "trainable_pct": 100.0 * (n_proj + n_lora) / max(1, n_total),
+            "peak_cuda_mb": peak_mb,
+            "lora_time_s": time.time() - t_lora,
+            "lora_val_curve": lora_val_curve,
+        }
+        print(
+            f"  [LoRA Summary] r={lora_rank}, lr={lora_lr:.1e} | Trainable: {n_proj + n_lora:,} "
+            f"({lora_info['trainable_pct']:.3f}%, LoRA={n_lora:,}) | Peak CUDA: {peak_mb:.1f} MB | Final Val: {lora_val_curve[-1][1]:.4f}",
+            flush=True,
+        )
+
     final_val_loss = val_losses[-1][1]
     final_test_loss = final_val_loss
+    per_image_test_losses = []
     mean_bleu4 = 0.0
     generated_samples = []
 
     if eval_test:
-        final_test_loss = evaluate_split_all_captions(test_recs)
+        final_test_loss, per_image_test_losses = evaluate_split_all_captions(test_recs, return_per_image=True)
 
         if projector is not None:
             projector.eval()
         if learned_prefix is not None:
             learned_prefix.eval()
 
+        im_end_ids = tokenizer.encode("<|im_end|>", add_special_tokens=False)
+        eos_ids = set(x for x in [tokenizer.eos_token_id, tokenizer.pad_token_id, 151643, 151645, 198] + im_end_ids if x is not None)
         sample_test_recs = test_recs[:10]
         p_tensor = torch.tensor([prompt_ids], device=device, dtype=torch.long)
         with torch.no_grad():
@@ -778,7 +919,10 @@ def train_and_evaluate(
                         out = qwen_model(inputs_embeds=curr_embeds)
                         next_tok = torch.argmax(out.logits[:, -1, :], dim=-1)
                         tok_id = next_tok.item()
-                        if tok_id in [tokenizer.eos_token_id, 151645, 198]:
+                        if tok_id in eos_ids:
+                            break
+                        tok_piece = tokenizer.decode([tok_id], skip_special_tokens=False)
+                        if "<|im_end|>" in tok_piece or "<|endoftext|>" in tok_piece or "\n" in tok_piece:
                             break
                         gen_toks.append(tok_id)
                         next_embed = embed_layer(next_tok.unsqueeze(0))
@@ -800,6 +944,10 @@ def train_and_evaluate(
 
         mean_bleu4 = float(np.mean([s["bleu4"] for s in generated_samples]))
 
+    if lora_stage:
+        detach_lora_from_attention(qwen_model)
+        qwen_model.eval()
+
     return {
         "mode": mode,
         "seed": seed,
@@ -811,10 +959,14 @@ def train_and_evaluate(
         "images_seen": images_seen,
         "step0_val_loss": step0_val_loss,
         "final_val_loss": final_val_loss,
+        "best_val_epoch": best_ep,
+        "best_val_loss": best_vl,
         "final_test_loss": final_test_loss,
+        "per_image_test_losses": per_image_test_losses,
         "mean_bleu4": mean_bleu4,
         "generated_samples": generated_samples,
         "val_losses": val_losses,
+        "lora_info": lora_info,
         "first_20_update_losses": update_losses[:20],
         "last_20_update_losses": update_losses[-20:],
         "training_time_s": elapsed,
@@ -860,6 +1012,12 @@ def main():
     parser.add_argument("--verify_data", action="store_true", help="Run alignment diagnostics only")
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint JSON if present")
     parser.add_argument("--no_drive", action="store_true", help="Disable Google Drive saving")
+    parser.add_argument("--print_epoch_curve", action="store_true", help="Print per-epoch time, train loss, and val loss")
+    parser.add_argument("--lora_stage", action="store_true", help="Run optional rank-r LoRA stage on attention projections after projector training")
+    parser.add_argument("--lora_rank", type=int, default=16, help="LoRA rank (default: 16)")
+    parser.add_argument("--lora_lr", type=float, default=1e-5, help="LoRA stage learning rate (default: 1e-5)")
+    parser.add_argument("--lora_epochs", type=int, default=5, help="LoRA stage epochs (default: 5)")
+    parser.add_argument("--check_fp16", action="store_true", help="Compare FP16 autocast vs FP32 on one fixed batch (loss, grad cosine, NaNs)")
     args = parser.parse_args()
 
     device, output_dir = setup_environment(use_drive=not args.no_drive)
@@ -887,6 +1045,53 @@ def main():
 
     if args.verify_data:
         verify_data_alignment(records, features_dict)
+        return
+
+    if args.check_fp16:
+        prompt_ids, pad_id, tokenized = pretokenize_splits(records, tokenizer)
+        train_recs = [r for r in records if r["split"] == "train"][:args.batch_size]
+        batch_items = [(r["image_id"], tokenized[r["image_id"]][0]) for r in train_recs]
+        embed_layer = qwen_model.model.embed_tokens
+        def run_one(use_fp16: bool):
+            torch.manual_seed(42)
+            proj = Projector(768, 896, arch=args.arch, num_tokens=num_tokens, use_pos_embed=True).to(device).float()
+            proj.train()
+            qwen_dtype = torch.float16 if (use_fp16 and device == "cuda") else torch.float32
+            qwen_model.to(dtype=qwen_dtype)
+            def v_fn(items, B):
+                v_raw = torch.stack([features_dict[iid] for iid, _ in items]).to(device).float()
+                return proj(v_raw)
+            tot_ids, text_attn, p_len, resp_lens = build_batch_tensors(batch_items, prompt_ids, pad_id, device)
+            B = len(batch_items)
+            with torch.no_grad():
+                text_embeds = embed_layer(tot_ids)
+            with torch.amp.autocast("cuda", dtype=torch.float16, enabled=(use_fp16 and device == "cuda")):
+                v_pref = v_fn(batch_items, B)
+                spliced = torch.cat([v_pref.to(text_embeds.dtype), text_embeds], dim=1)
+                attn_mask = torch.cat([torch.ones((B, v_pref.shape[1]), device=device, dtype=torch.long), text_attn], dim=1)
+                pos_ids = attn_mask.long().cumsum(-1) - 1
+                pos_ids.masked_fill_(attn_mask == 0, 0)
+                pred_len = spliced.shape[1] - 1
+                labels = torch.full((B, pred_len), -100, device=device, dtype=torch.long)
+                for b, r_len in enumerate(resp_lens):
+                    start = v_pref.shape[1] + p_len - 1
+                    labels[b, start:start + r_len] = tot_ids[b, p_len:p_len + r_len]
+                out = qwen_model(inputs_embeds=spliced, attention_mask=attn_mask, position_ids=pos_ids)
+                logits = out.logits[:, :pred_len, :].float()
+                loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1), ignore_index=-100)
+            nan_cnt = int(torch.isnan(logits).sum().item() + torch.isinf(logits).sum().item() + int(torch.isnan(loss).item()))
+            loss.backward()
+            grads = {n: p.grad.detach().float().clone() for n, p in proj.named_parameters()}
+            nan_cnt += sum(int(torch.isnan(g).sum().item() + torch.isinf(g).sum().item()) for g in grads.values())
+            return float(loss.item()), nan_cnt, grads
+        l32, n32, g32 = run_one(False)
+        l16, n16, g16 = run_one(True)
+        print(f"\n[FP16 Autocast vs FP32 Check | Batch={args.batch_size}]")
+        print(f"  FP32: loss={l32:.6f}, NaN/Inf={n32}")
+        print(f"  FP16: loss={l16:.6f}, NaN/Inf={n16} | Rel Diff={abs(l16 - l32) / max(1e-12, abs(l32)) * 100:.4f}%")
+        for n in g32:
+            cos = F.cosine_similarity(g32[n].flatten(), g16[n].flatten(), dim=0).item()
+            print(f"    grad {n:<16}: cos={cos:.6f}")
         return
 
     if args.overfit:
@@ -978,7 +1183,10 @@ def main():
                     device=device, prompt_ids=prompt_ids, pad_id=pad_id,
                     tokenized=tokenized, shuffle_map=shuffle_map,
                     epochs=args.epochs, batch_size=args.batch_size, grad_accum=args.grad_accum,
-                    arch=args.arch, num_tokens=num_tokens, eval_test=True
+                    arch=args.arch, num_tokens=num_tokens, eval_test=True,
+                    print_epoch_curve=args.print_epoch_curve,
+                    lora_stage=args.lora_stage, lora_rank=args.lora_rank,
+                    lora_lr=args.lora_lr, lora_epochs=args.lora_epochs,
                 )
                 benchmark_results[mode].append(res)
                 print(

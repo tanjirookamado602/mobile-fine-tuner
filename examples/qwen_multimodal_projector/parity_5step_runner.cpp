@@ -1,15 +1,20 @@
 #include "finetune_ops/core/tensor.h"
 #include "finetune_ops/core/ops.h"
 #include "finetune_ops/core/autograd_engine.h"
+#include "finetune_ops/core/memory_manager.h"
+#include "finetune_ops/core/quant_io.h"
 #include "finetune_ops/graph/auto_model.h"
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <vector>
 #include <string>
 #include <iomanip>
 #include <cmath>
 #include <cstring>
+#include <chrono>
+#include <regex>
 #include <filesystem>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -97,11 +102,35 @@ public:
     }
 };
 
-int main() {
+static std::pair<double, double> read_proc_mem_mb() {
+    std::ifstream f("/proc/self/status");
+    std::string line;
+    double rss = 0.0, hwm = 0.0;
+    while (std::getline(f, line)) {
+        if (line.rfind("VmRSS:", 0) == 0) {
+            std::istringstream iss(line.substr(6));
+            double kb = 0; iss >> kb; rss = kb / 1024.0;
+        } else if (line.rfind("VmHWM:", 0) == 0) {
+            std::istringstream iss(line.substr(6));
+            double kb = 0; iss >> kb; hwm = kb / 1024.0;
+        }
+    }
+    return {rss, hwm};
+}
+
+int main(int argc, char** argv) {
+    bool use_q8 = false;
+    int max_steps = 5;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--q8") use_q8 = true;
+        else if (a == "--steps" && i + 1 < argc) max_steps = std::stoi(argv[++i]);
+    }
     std::string data_dir = "data/parity_test";
-    std::string dump_dir = data_dir + "/cpp_dump";
+    std::string dump_dir = data_dir + (use_q8 ? "/cpp_dump_q8" : "/cpp_dump");
     std::filesystem::create_directories(dump_dir);
     std::string model_dir = "models/Qwen2.5-0.5B";
+    std::string q8_path = "models/qwen2.5-0.5b-q8_0.q8";
 
     std::cout << "========================================================================\n";
     std::cout << "  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       \n";
@@ -144,10 +173,61 @@ int main() {
     std::vector<int32_t> labels(34);
     f_lb.read(reinterpret_cast<char*>(labels.data()), 34 * sizeof(int32_t));
 
-    AutoModelLoadOptions opts;
-    opts.load_weights = true;
-    auto model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
-    auto qwen = model->qwen();
+    std::shared_ptr<AutoModelForCausalLM> model;
+    QwenModel* qwen = nullptr;
+    if (use_q8) {
+        AutoModelLoadOptions opts;
+        opts.load_weights = false;
+        model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
+        qwen = model->qwen();
+        qwen->init_linear_wrappers();
+        std::vector<ops::QuantTensor> tensors;
+        std::string qerr;
+        if (!ops::read_quant_model(q8_path, tensors, &qerr)) {
+            std::cerr << "Failed to read Q8 model: " << qerr << "\n";
+            return 1;
+        }
+        std::regex q8_name(R"(layers\.(\d+)\.(.+))");
+        for (auto& t : tensors) {
+            if (t.is_q8) {
+                std::smatch m;
+                if (!std::regex_match(t.name, m, q8_name)) continue;
+                int li = std::stoi(m[1].str());
+                std::string sub = m[2].str();
+                auto& blk = qwen->get_block(li);
+                LoRALinear* lin = nullptr;
+                if (sub == "self_attn.q_proj.weight") lin = blk.q_lin.get();
+                else if (sub == "self_attn.k_proj.weight") lin = blk.k_lin.get();
+                else if (sub == "self_attn.v_proj.weight") lin = blk.v_lin.get();
+                else if (sub == "self_attn.o_proj.weight") lin = blk.o_lin.get();
+                else if (sub == "mlp.gate_proj.weight") lin = blk.gate_lin.get();
+                else if (sub == "mlp.up_proj.weight") lin = blk.up_lin.get();
+                else if (sub == "mlp.down_proj.weight") lin = blk.down_lin.get();
+                if (lin) lin->adopt_quantized_weight(t.k, t.m, std::move(t.q8));
+                t.q8.clear(); t.q8.shrink_to_fit();
+            } else {
+                auto ten = std::make_shared<Tensor>(t.shape, static_cast<const void*>(t.f32.data()), DType::kFloat32, kCPU);
+                qwen->assign_weight(t.name, ten);
+                t.f32.clear(); t.f32.shrink_to_fit();
+            }
+        }
+        for (int li = 0; li < qwen->config().num_hidden_layers; ++li) {
+            auto& blk = qwen->get_block(li);
+            if (blk.q_lin) blk.q_lin->set_base_weights(nullptr, blk.q_proj_bias);
+            if (blk.k_lin) blk.k_lin->set_base_weights(nullptr, blk.k_proj_bias);
+            if (blk.v_lin) blk.v_lin->set_base_weights(nullptr, blk.v_proj_bias);
+            if (blk.o_lin) blk.o_lin->set_base_weights(nullptr, nullptr);
+            if (blk.gate_lin) blk.gate_lin->set_base_weights(nullptr, nullptr);
+            if (blk.up_lin) blk.up_lin->set_base_weights(nullptr, nullptr);
+            if (blk.down_lin) blk.down_lin->set_base_weights(nullptr, nullptr);
+        }
+        MemoryManager::instance().clear_unused_memory();
+    } else {
+        AutoModelLoadOptions opts;
+        opts.load_weights = true;
+        model = AutoModelForCausalLM::from_pretrained(model_dir, opts);
+        qwen = model->qwen();
+    }
     qwen->freeze_base();
 
     SimpleAdam optimizer(1e-3f);
@@ -158,7 +238,8 @@ int main() {
 
     std::vector<float> cpp_losses;
 
-    for (int step = 1; step <= 5; ++step) {
+    for (int step = 1; step <= max_steps; ++step) {
+        auto t0 = std::chrono::steady_clock::now();
         for (auto& p : params) p->zero_grad();
 
         auto ln_out = layer_norm(v_feat, ln_w, ln_b);
@@ -218,7 +299,14 @@ int main() {
         }
 
         ops::autograd::Engine::instance().clear_graph();
-        std::cout << "  C++ Step " << step << ": Loss = " << std::fixed << std::setprecision(6) << loss_val << "\n";
+        MemoryManager::instance().clear_unused_memory();
+        auto t1 = std::chrono::steady_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        auto [rss_mb, hwm_mb] = read_proc_mem_mb();
+        std::cout << "  C++ (" << (use_q8 ? "Q8_0" : "FP32") << ") Step " << step
+                  << ": Loss = " << std::fixed << std::setprecision(6) << loss_val
+                  << " | Time = " << std::setprecision(1) << ms << " ms"
+                  << " | VmRSS = " << rss_mb << " MB | VmHWM = " << hwm_mb << " MB\n";
 #if defined(__GLIBC__)
         malloc_trim(0);
 #endif

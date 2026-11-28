@@ -1,0 +1,56 @@
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.077204
+    grad ln_b      : norm=0.085112
+    grad W1        : norm=3.570920
+    grad b1        : norm=0.141749
+    grad W2        : norm=3.793071
+    grad b2        : norm=0.404542
+    grad scale     : norm=4.673744
+    grad pos_embed : norm=11.910149
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713264
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302919
+    after step1 b1        : norm=0.620380
+    after step1 W2        : norm=17.300714
+    after step1 b2        : norm=0.562923
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710188
+    scale value after step1 = 0.014478
+  C++ (FP32) Step 1: Loss = 5.120154 | Time = 7898.3 ms | VmRSS = 2480.2 MB | VmHWM = 3834.7 MB
+========================================================================
+  MobileFineTuner: 5-Step Exact Parity Verification (C++ Runner)       
+========================================================================
+  Step 1 Gradients (C++):
+    grad ln_w      : norm=0.071166
+    grad ln_b      : norm=0.078418
+    grad W1        : norm=3.291510
+    grad b1        : norm=0.130568
+    grad W2        : norm=3.507024
+    grad b2        : norm=0.373852
+    grad scale     : norm=4.286722
+    grad pos_embed : norm=11.187986
+  Step 1 Updated Weights (C++):
+    after step1 ln_w      : norm=27.713116
+    after step1 ln_b      : norm=0.027712
+    after step1 W1        : norm=17.302727
+    after step1 b1        : norm=0.620366
+    after step1 W2        : norm=17.301203
+    after step1 b2        : norm=0.563221
+    after step1 scale     : norm=0.014478
+    after step1 pos_embed : norm=3.710346
+    scale value after step1 = 0.014478
+  C++ (Q8_0) Step 1: Loss = 5.106408 | Time = 23700.2 ms | VmRSS = 1274.5 MB | VmHWM = 1930.3 MB
+=== 1. PyTorch FP32 vs FP16 Autocast (CPU, Fixed Batch) ===
+=== C++ FP32 vs C++ Q8_0 Step-1 Gradient Cosine (data/parity_test) ===
+  grad ln_w      : cos=0.998145, rel_err=9.765e-02
+  grad ln_b      : cos=0.997784, rel_err=1.013e-01
+  grad W1        : cos=0.997283, rel_err=1.060e-01
+  grad b1        : cos=0.997564, rel_err=1.035e-01
+  grad W2        : cos=0.997126, rel_err=1.054e-01
+  grad b2        : cos=0.997409, rel_err=1.027e-01
+  grad scale     : cos=1.000000, rel_err=8.281e-02
+  grad pos_embed : cos=0.990701, rel_err=1.454e-01
